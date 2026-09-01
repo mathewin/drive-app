@@ -56,7 +56,8 @@ class CalculatorService : AccessibilityService() {
             up++
         }
         val out = ArrayList<String>()
-        collect(container, out)
+        val c = container ?: return null
+        collect(c, out)
         return out.takeIf { it.isNotEmpty() }
     }
 
