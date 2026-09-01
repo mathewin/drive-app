@@ -12,7 +12,10 @@ class CalculatorService : AccessibilityService() {
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         val root = rootInActiveWindow ?: return
         val pkg = root.packageName?.toString()?.lowercase() ?: return
-        if (RIDE_PACKAGES.none { pkg.contains(it) }) return
+        if (RIDE_PACKAGES.none { pkg.contains(it) }) {
+            OverlayManager.hide(this)
+            return
+        }
 
         val now = System.currentTimeMillis()
         if (now - lastParseMs < 1500) return
@@ -20,7 +23,10 @@ class CalculatorService : AccessibilityService() {
 
         val texts = ArrayList<String>()
         collect(root, texts)
-        if (texts.isEmpty()) return
+        if (texts.isEmpty() || !RideCardParser.hasOfferContext(texts)) {
+            OverlayManager.hide(this)
+            return
+        }
 
         val hash = texts.joinToString("|")
         if (hash == lastHash) return

@@ -7,6 +7,31 @@ object RideCardParser {
     private val RE_KM = Regex("([0-9]{1,3}(?:[.,][0-9]+)?)\\s*km", RegexOption.IGNORE_CASE)
     private val RE_MIN = Regex("([0-9]{1,3})\\s*(?:min|minutos|minuto)", RegexOption.IGNORE_CASE)
 
+    private val OFFER_KEYWORDS = listOf(
+        "aceitar",
+        "aceite",
+        "aceito",
+        "recusar",
+        "recuse",
+        "descartar",
+        "rejeitar",
+        "nova corrida",
+        "nova solicita",
+        "novo pedido",
+        "nova chamada",
+        "chegou uma corrida",
+        "solicitacao de corrida",
+        "pedido novo",
+        "oferta de corrida"
+    )
+
+    fun hasOfferContext(texts: List<String>): Boolean {
+        return texts.any { t ->
+            val lower = t.lowercase()
+            OFFER_KEYWORDS.any { lower.contains(it) }
+        }
+    }
+
     fun parse(texts: List<String>): RideData? {
         val all = texts.map { it.trim() }.filter { it.isNotBlank() }
         if (all.isEmpty()) return null
