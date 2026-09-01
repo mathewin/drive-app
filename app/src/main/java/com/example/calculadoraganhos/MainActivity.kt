@@ -87,7 +87,7 @@ class MainActivity : AppCompatActivity() {
             return
         }
         val d = RideData(42.37, 15.0, 25.0)
-        OverlayManager.show(this, d, Calculator.calculate(d, prefs.minPerKm, prefs.minPerHour))
+        OverlayManager.show(this, null, d, Calculator.calculate(d, prefs.minPerKm, prefs.minPerHour))
     }
 
     private fun atualizarStatus() {

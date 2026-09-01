@@ -1,7 +1,6 @@
 package com.example.calculadoraganhos
 
 import android.content.Context
-import android.graphics.Color
 import android.graphics.PixelFormat
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
@@ -33,10 +32,10 @@ object OverlayManager {
         else -> 0xFFDC2626.toInt()
     }
 
-    fun show(context: Context, d: RideData, r: CalcResult) {
+    fun show(context: Context, packageName: String?, d: RideData, r: CalcResult) {
         val wm = context.getSystemService(Context.WINDOW_SERVICE) as? WindowManager ?: return
         hide(context)
-        val card = buildCard(context, d, r)
+        val card = buildCard(context, packageName, d, r)
         val params = WindowManager.LayoutParams(
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.WRAP_CONTENT,
@@ -63,9 +62,27 @@ object OverlayManager {
         view = null
     }
 
-    private fun buildCard(context: Context, d: RideData, r: CalcResult): View {
+    private fun buildCard(context: Context, packageName: String?, d: RideData, r: CalcResult): View {
         val dp = context.resources.displayMetrics.density
-        val color = verdictColor(r.verdict)
+        val pkg = packageName?.lowercase()
+        val is99 = pkg?.contains("br.com.taxiapp") == true
+        val isUber = pkg?.contains("com.ubercab") == true
+
+        val bg = when {
+            is99 -> 0xFF000000.toInt()
+            isUber -> 0xFFFFFFFF.toInt()
+            else -> 0xFF17181C.toInt()
+        }
+        val fareColor = when {
+            is99 -> 0xFFFFCC00.toInt()
+            isUber -> 0xFF000000.toInt()
+            else -> 0xFFFFFFFF.toInt()
+        }
+        val lineColor = when {
+            is99 -> 0xFFCCCCCC.toInt()
+            isUber -> 0xFF666666.toInt()
+            else -> 0xFFCCCCCC.toInt()
+        }
 
         val container = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
@@ -73,15 +90,16 @@ object OverlayManager {
             gravity = Gravity.CENTER
             background = GradientDrawable().apply {
                 cornerRadius = 14 * dp
-                setColor(color)
+                setColor(bg)
+                setStroke((2 * dp).toInt(), verdictColor(r.verdict))
             }
         }
 
-        fun text(s: String, sp: Float, bold: Boolean, alpha: Float = 1f): TextView =
+        fun text(s: String, sp: Float, bold: Boolean, color: Int, alpha: Float = 1f): TextView =
             TextView(context).apply {
                 this.text = s
                 textSize = sp
-                setTextColor(Color.WHITE)
+                setTextColor(color)
                 this.alpha = alpha
                 typeface = if (bold) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
                 gravity = Gravity.CENTER
@@ -93,15 +111,15 @@ object OverlayManager {
             if (d.km > 0) append(formatKm(d.km))
         }
 
-        container.addView(text("DriveWin - ${verdictLabel(r.verdict)}", 11f, true, 0.95f))
-        container.addView(text(formatMoney(d.fare), 24f, true))
-        if (tripInfo.isNotEmpty()) container.addView(text(tripInfo, 12f, false, 0.95f))
+        container.addView(text("DriveWin - ${verdictLabel(r.verdict)}", 11f, true, verdictColor(r.verdict)))
+        container.addView(text(formatMoney(d.fare), 24f, true, fareColor))
+        if (tripInfo.isNotEmpty()) container.addView(text(tripInfo, 12f, false, lineColor, 0.95f))
         val stats = buildString {
             if (d.km > 0) append("R\$/km ${formatMoney(r.perKm)}")
             if (d.km > 0 && d.minutes > 0) append(" - ")
             if (d.minutes > 0) append("R\$/h ${formatMoney(r.perHour)}")
         }
-        container.addView(text(stats, 14f, false, 0.97f))
+        container.addView(text(stats, 14f, false, lineColor, 0.97f))
         return container
     }
 
