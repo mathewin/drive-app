@@ -1,3 +1,5 @@
 <resources>
-    <string name="app_name">My Application</string>
+    <string name="app_name">DriveWin</string>
+    <string name="service_label">DriveWin - Calculadora de ganhos</string>
+    <string name="accessibility_desc">Le o valor, km e tempo dos cards de corrida da Uber, 99, inDriver e Bolt para calcular R$/km e R$/h em tempo real.</string>
 </resources>
