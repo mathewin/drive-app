@@ -38,9 +38,18 @@ class CalculatorService : AccessibilityService() {
         val prefs = Prefs(this)
         val res = Calculator.calculate(data, prefs.minPerKm, prefs.minPerHour)
         OverlayManager.show(this, pkg, cardTexts, data, res)
+        RideHistory(this).addRide(appLabel(pkg), data.fare, data.km, data.minutes)
     }
 
     override fun onInterrupt() {
+    }
+
+    private fun appLabel(pkg: String): String = when {
+        pkg.contains("com.ubercab") -> "Uber"
+        pkg.contains("br.com.taxiapp") -> "99"
+        pkg.contains("com.indrive") -> "inDriver"
+        pkg.contains("io.bolt") -> "Bolt"
+        else -> pkg
     }
 
     private fun offerCardTexts(root: AccessibilityNodeInfo): List<String>? {
