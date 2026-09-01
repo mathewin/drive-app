@@ -32,9 +32,8 @@ class CalculatorService : AccessibilityService() {
         if (hash == lastHash) return
         lastHash = hash
 
-        val cardTexts = textsFromOfferCard(root)
-        val data = (cardTexts?.let { RideCardParser.parse(it) } ?: RideCardParser.parse(allTexts))
-            ?: return
+        val cardTexts = offerCardTexts(root)
+        val data = cardTexts?.let { RideCardParser.parse(it) } ?: return
 
         val prefs = Prefs(this)
         val res = Calculator.calculate(data, prefs.minPerKm, prefs.minPerHour)
@@ -44,21 +43,19 @@ class CalculatorService : AccessibilityService() {
     override fun onInterrupt() {
     }
 
-    private fun textsFromOfferCard(root: AccessibilityNodeInfo): List<String>? {
+    private fun offerCardTexts(root: AccessibilityNodeInfo): List<String>? {
         val offer = findOfferNode(root) ?: return null
         var node: AccessibilityNodeInfo? = offer
-        var container: AccessibilityNodeInfo? = offer
         var up = 0
-        while (up < 4) {
-            val p = node?.parent ?: break
-            if (p.childCount >= 2) container = p
-            node = p
+        while (up < 6) {
+            val n = node ?: break
+            val texts = ArrayList<String>()
+            collect(n, texts)
+            if (RideCardParser.parse(texts) != null) return texts
+            node = n.parent
             up++
         }
-        val out = ArrayList<String>()
-        val c = container ?: return null
-        collect(c, out)
-        return out.takeIf { it.isNotEmpty() }
+        return null
     }
 
     private fun findOfferNode(node: AccessibilityNodeInfo): AccessibilityNodeInfo? {
