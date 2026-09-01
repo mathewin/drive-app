@@ -86,6 +86,6 @@ class CalculatorService : AccessibilityService() {
             "io.bolt"
         )
 
-        val OFFER_ACTION_WORDS = listOf("aceitar", "recusar", "descartar", "rejeitar", "aceite")
+        val OFFER_ACTION_WORDS = listOf("aceitar", "recusar", "descartar", "rejeitar", "aceite", "selecionar", "escolher", "reservar")
     }
 }

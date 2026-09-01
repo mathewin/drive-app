@@ -25,7 +25,11 @@ object RideCardParser {
         "chegou uma corrida",
         "solicitacao de corrida",
         "pedido novo",
-        "oferta de corrida"
+        "oferta de corrida",
+        "selecionar",
+        "escolher",
+        "reservar",
+        "radar de viagens"
     )
 
     fun hasOfferContext(texts: List<String>): Boolean {
