@@ -21,24 +21,54 @@ class CalculatorService : AccessibilityService() {
         if (now - lastParseMs < 1500) return
         lastParseMs = now
 
-        val texts = ArrayList<String>()
-        collect(root, texts)
-        if (texts.isEmpty() || !RideCardParser.hasOfferContext(texts)) {
+        val allTexts = ArrayList<String>()
+        collect(root, allTexts)
+        if (allTexts.isEmpty() || !RideCardParser.hasOfferContext(allTexts)) {
             OverlayManager.hide(this)
             return
         }
 
-        val hash = texts.joinToString("|")
+        val hash = allTexts.joinToString("|")
         if (hash == lastHash) return
         lastHash = hash
 
-        val data = RideCardParser.parse(texts) ?: return
+        val cardTexts = textsFromOfferCard(root)
+        val data = (cardTexts?.let { RideCardParser.parse(it) } ?: RideCardParser.parse(allTexts))
+            ?: return
+
         val prefs = Prefs(this)
         val res = Calculator.calculate(data, prefs.minPerKm, prefs.minPerHour)
         OverlayManager.show(this, data, res)
     }
 
     override fun onInterrupt() {
+    }
+
+    private fun textsFromOfferCard(root: AccessibilityNodeInfo): List<String>? {
+        val offer = findOfferNode(root) ?: return null
+        var node: AccessibilityNodeInfo? = offer
+        var container: AccessibilityNodeInfo? = offer
+        var up = 0
+        while (up < 4) {
+            val p = node?.parent ?: break
+            if (p.childCount >= 2) container = p
+            node = p
+            up++
+        }
+        val out = ArrayList<String>()
+        collect(container, out)
+        return out.takeIf { it.isNotEmpty() }
+    }
+
+    private fun findOfferNode(node: AccessibilityNodeInfo): AccessibilityNodeInfo? {
+        val t = node.text?.toString()?.lowercase()
+        if (t != null && OFFER_ACTION_WORDS.any { t.contains(it) }) return node
+        for (i in 0 until node.childCount) {
+            val c = node.getChild(i) ?: continue
+            val r = findOfferNode(c)
+            if (r != null) return r
+        }
+        return null
     }
 
     private fun collect(node: AccessibilityNodeInfo, out: ArrayList<String>) {
@@ -57,5 +87,7 @@ class CalculatorService : AccessibilityService() {
             "com.indrive",
             "io.bolt"
         )
+
+        val OFFER_ACTION_WORDS = listOf("aceitar", "recusar", "descartar", "rejeitar", "aceite")
     }
 }
