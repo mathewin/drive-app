@@ -37,7 +37,7 @@ class CalculatorService : AccessibilityService() {
 
         val prefs = Prefs(this)
         val res = Calculator.calculate(data, prefs.minPerKm, prefs.minPerHour)
-        OverlayManager.show(this, pkg, data, res)
+        OverlayManager.show(this, pkg, cardTexts, data, res)
     }
 
     override fun onInterrupt() {

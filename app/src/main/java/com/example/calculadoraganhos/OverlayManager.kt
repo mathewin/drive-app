@@ -4,6 +4,8 @@ import android.content.Context
 import android.graphics.PixelFormat
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
+import android.os.Handler
+import android.os.Looper
 import android.view.Gravity
 import android.view.View
 import android.view.WindowManager
@@ -14,7 +16,12 @@ import java.util.Locale
 
 object OverlayManager {
 
+    private enum class Theme { NINETY_NINE, UBER, DEFAULT }
+
+    private const val HIDE_DELAY_MS = 7000L
+
     private var view: View? = null
+    private var hideRunnable: Runnable? = null
 
     private val money: NumberFormat = NumberFormat.getCurrencyInstance(Locale("pt", "BR"))
 
@@ -32,10 +39,10 @@ object OverlayManager {
         else -> 0xFFDC2626.toInt()
     }
 
-    fun show(context: Context, packageName: String?, d: RideData, r: CalcResult) {
+    fun show(context: Context, packageName: String?, texts: List<String>?, d: RideData, r: CalcResult) {
         val wm = context.getSystemService(Context.WINDOW_SERVICE) as? WindowManager ?: return
         hide(context)
-        val card = buildCard(context, packageName, d, r)
+        val card = buildCard(context, themeFor(packageName, texts), d, r)
         val params = WindowManager.LayoutParams(
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.WRAP_CONTENT,
@@ -48,12 +55,15 @@ object OverlayManager {
         try {
             wm.addView(card, params)
             view = card
+            scheduleHide(context, card)
         } catch (_: Exception) {
         }
     }
 
     fun hide(context: Context) {
         val v = view ?: return
+        hideRunnable?.let { Handler(Looper.getMainLooper()).removeCallbacks(it) }
+        hideRunnable = null
         val wm = context.getSystemService(Context.WINDOW_SERVICE) as? WindowManager ?: return
         try {
             wm.removeView(v)
@@ -62,26 +72,43 @@ object OverlayManager {
         view = null
     }
 
-    private fun buildCard(context: Context, packageName: String?, d: RideData, r: CalcResult): View {
-        val dp = context.resources.displayMetrics.density
-        val pkg = packageName?.lowercase()
-        val is99 = pkg?.contains("br.com.taxiapp") == true
-        val isUber = pkg?.contains("com.ubercab") == true
+    private fun scheduleHide(context: Context, card: View) {
+        val h = Handler(Looper.getMainLooper())
+        val runnable = Runnable {
+            if (view === card) hide(context)
+        }
+        hideRunnable = runnable
+        h.postDelayed(runnable, HIDE_DELAY_MS)
+    }
 
-        val bg = when {
-            is99 -> 0xFF000000.toInt()
-            isUber -> 0xFFFFFFFF.toInt()
-            else -> 0xFF17181C.toInt()
+    private fun themeFor(packageName: String?, texts: List<String>?): Theme {
+        val pkg = packageName?.lowercase()
+        if (pkg?.contains("br.com.taxiapp") == true) return Theme.NINETY_NINE
+        if (pkg?.contains("com.ubercab") == true) return Theme.UBER
+
+        val joined = (texts?.joinToString(" ") ?: "").lowercase()
+        if (joined.contains("radar de viagens") || joined.contains("taxiapp")) return Theme.NINETY_NINE
+        if (joined.contains("uberx") || joined.contains("uber black") || joined.contains("uber comfort") || joined.contains("uber")) return Theme.UBER
+        return Theme.DEFAULT
+    }
+
+    private fun buildCard(context: Context, theme: Theme, d: RideData, r: CalcResult): View {
+        val dp = context.resources.displayMetrics.density
+
+        val bg = when (theme) {
+            Theme.NINETY_NINE -> 0xFF000000.toInt()
+            Theme.UBER -> 0xFFFFFFFF.toInt()
+            Theme.DEFAULT -> 0xFF17181C.toInt()
         }
-        val fareColor = when {
-            is99 -> 0xFFFFCC00.toInt()
-            isUber -> 0xFF000000.toInt()
-            else -> 0xFFFFFFFF.toInt()
+        val fareColor = when (theme) {
+            Theme.NINETY_NINE -> 0xFFFFCC00.toInt()
+            Theme.UBER -> 0xFF000000.toInt()
+            Theme.DEFAULT -> 0xFFFFFFFF.toInt()
         }
-        val lineColor = when {
-            is99 -> 0xFFCCCCCC.toInt()
-            isUber -> 0xFF666666.toInt()
-            else -> 0xFFCCCCCC.toInt()
+        val lineColor = when (theme) {
+            Theme.NINETY_NINE -> 0xFFCCCCCC.toInt()
+            Theme.UBER -> 0xFF666666.toInt()
+            Theme.DEFAULT -> 0xFFCCCCCC.toInt()
         }
 
         val container = LinearLayout(context).apply {
