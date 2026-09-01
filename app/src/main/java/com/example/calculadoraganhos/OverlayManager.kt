@@ -87,8 +87,15 @@ object OverlayManager {
                 gravity = Gravity.CENTER
             }
 
+        val tripInfo = buildString {
+            if (d.minutes > 0) append(formatTime(d.minutes))
+            if (d.minutes > 0 && d.km > 0) append(" - ")
+            if (d.km > 0) append(formatKm(d.km))
+        }
+
         container.addView(text("DriveWin - ${verdictLabel(r.verdict)}", 11f, true, 0.95f))
         container.addView(text(formatMoney(d.fare), 24f, true))
+        if (tripInfo.isNotEmpty()) container.addView(text(tripInfo, 12f, false, 0.95f))
         val stats = buildString {
             if (d.km > 0) append("R\$/km ${formatMoney(r.perKm)}")
             if (d.km > 0 && d.minutes > 0) append(" - ")
@@ -96,5 +103,14 @@ object OverlayManager {
         }
         container.addView(text(stats, 14f, false, 0.97f))
         return container
+    }
+
+    fun formatKm(v: Double): String = String.format(Locale("pt", "BR"), "%.1f km", v)
+
+    fun formatTime(minutes: Double): String {
+        val m = minutes.toInt()
+        val h = m / 60
+        val rest = m % 60
+        return if (h > 0) "${h}h${rest}min" else "${m}min"
     }
 }
