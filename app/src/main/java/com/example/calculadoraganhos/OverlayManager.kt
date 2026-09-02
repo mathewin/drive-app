@@ -1,54 +1,22 @@
 package com.example.calculadoraganhos
 
 import android.content.Context
-import android.graphics.PixelFormat
 import android.graphics.Typeface
+import android.graphics.drawable.GradientDrawable
 import android.media.AudioManager
 import android.media.ToneGenerator
 import android.os.Handler
 import android.os.Looper
 import android.os.VibrationEffect
 import android.os.Vibrator
-import android.util.Log
+import android.util.TypedValue
 import android.view.Gravity
+import android.view.MotionEvent
+import android.view.View
 import android.view.WindowManager
-import androidx.compose.animation.animateContentSize
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.ComposeView
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import java.lang.ref.WeakReference
+import android.widget.LinearLayout
+import android.widget.TextView
+import kotlin.math.abs
 import kotlin.math.roundToInt
 
 object OverlayManager {
@@ -61,35 +29,46 @@ object OverlayManager {
         val confidence: Double
     )
 
-    var content by mutableStateOf<OverlayContent?>(null)
-        private set
-
-    var expanded by mutableStateOf(false)
-        private set
+    private val COLOR_BG = 0xFF0E0F12.toInt()
+    private val COLOR_VERDE = 0xFF31F900.toInt()
+    private val COLOR_ROSA = 0xFFC864AF.toInt()
+    private val COLOR_BRANCO = 0xFFFFFFFF.toInt()
+    private val COLOR_CINZA = 0xFFC8C8C8.toInt()
+    private val COLOR_CINZA2 = 0xFF888888.toInt()
+    private val COLOR_AMBAR = 0xFFF5A623.toInt()
+    private val COLOR_VERMELHO = 0xFFFF4D4D.toInt()
 
     private var wm: WindowManager? = null
-    private var composeView: ComposeView? = null
+    private var view: LinearLayout? = null
     private var params: WindowManager.LayoutParams? = null
-    private var contextRef: WeakReference<Context>? = null
+    private var content: OverlayContent? = null
+    private var expanded = false
     private var hideRunnable: Runnable? = null
-    private var beepedHash: String? = null
+    private var lastX = 0f
+    private var lastY = 0f
+    private var dragging = false
+    private var density = 1f
 
     fun show(context: Context, c: OverlayContent, beep: Boolean) {
-        content = c
         try {
             val ctx = context.applicationContext
-            if (composeView == null) {
-                contextRef = WeakReference(ctx)
+            density = ctx.resources.displayMetrics.density
+            content = c
+            if (view == null) {
                 wm = ctx.getSystemService(Context.WINDOW_SERVICE) as? WindowManager
-                val view = ComposeView(ctx).apply {
-                    setContent { OverlayCard() }
+                val root = LinearLayout(ctx).apply {
+                    orientation = LinearLayout.VERTICAL
+                    setPadding(dp(16), dp(10), dp(16), dp(10))
+                    setOnTouchListener(overlayTouch)
                 }
                 val p = buildParams(ctx)
-                wm?.addView(view, p)
-                composeView = view
+                wm?.addView(root, p)
+                view = root
                 params = p
                 DriveWinLog.log("ovl", "card criado na tela (overlay ok)")
             }
+            expanded = false
+            rebuild(ctx, c)
             AppState.updateOverlayVisible(true)
             if (beep) beepAndVibrate(ctx)
             scheduleHide(ctx)
@@ -99,43 +78,157 @@ object OverlayManager {
             )
         } catch (t: Throwable) {
             DriveWinLog.log("ovl", "ERRO no overlay: ${t.message}")
-            content = null
-            composeView = null
-            params = null
+            cleanup()
         }
     }
 
     fun hide() {
         hideRunnable?.let { Handler(Looper.getMainLooper()).removeCallbacks(it) }
         hideRunnable = null
+        cleanup()
+    }
+
+    fun toggleExpanded(context: Context) {
+        val c = content ?: return
+        val v = view ?: return
+        expanded = !expanded
+        rebuild(context.applicationContext, c)
+    }
+
+    private val overlayTouch = View.OnTouchListener { v, ev ->
+        val p = params ?: return@OnTouchListener false
+        when (ev.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                lastX = ev.rawX
+                lastY = ev.rawY
+                dragging = false
+                true
+            }
+            MotionEvent.ACTION_MOVE -> {
+                val dx = ev.rawX - lastX
+                val dy = ev.rawY - lastY
+                if (!dragging && (abs(dx) > dp(6).toFloat() || abs(dy) > dp(6).toFloat())) dragging = true
+                if (dragging) {
+                    p.x += dx.roundToInt()
+                    p.y += dy.roundToInt()
+                    lastX = ev.rawX
+                    lastY = ev.rawY
+                    try {
+                        wm?.updateViewLayout(v, p)
+                    } catch (_: Exception) {
+                    }
+                }
+                true
+            }
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                if (dragging) {
+                    val ctx = v.context.applicationContext
+                    val prefs = Prefs(ctx)
+                    prefs.overlayPositionX = p.x
+                    prefs.overlayPositionY = p.y
+                } else {
+                    toggleExpanded(v.context)
+                }
+                true
+            }
+            else -> false
+        }
+    }
+
+    private fun rebuild(ctx: Context, c: OverlayContent) {
+        val root = view ?: return
+        root.removeAllViews()
+        val prefs = Prefs(ctx)
+        val scale = prefs.overlayFontSize / 13f
+        val alpha = prefs.overlayOpacity
+
+        val levelColor = when (c.result.level) {
+            Level.EXCELLENT, Level.GOOD -> COLOR_VERDE
+            Level.MEDIUM -> COLOR_AMBAR
+            Level.BAD -> COLOR_VERMELHO
+        }
+        val bg = GradientDrawable().apply {
+            cornerRadius = dp(16).toFloat()
+            setColor(COLOR_BG)
+            setStroke(dp(2), levelColor)
+        }
+        root.background = bg
+        root.alpha = alpha
+
+        val title = LinearLayout(ctx).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        title.addView(
+            text(ctx, "DRIVEWIN", 11 * scale, COLOR_ROSA, true)
+        )
+        val badge = text(ctx, c.result.level.label, 10 * scale, COLOR_BG, true).apply {
+            setPadding(dp(8), dp(2), dp(8), dp(2))
+            setBackgroundColor(levelColor)
+        }
+        title.addView(badge, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+            leftMargin = dp(8)
+        })
+        root.addView(title)
+
+        root.addView(
+            text(ctx, "${ParsingUtils.formatMoney(c.result.perKm)}/km", 20 * scale, COLOR_BRANCO, true),
+            paramsTop(dp(4))
+        )
+        root.addView(
+            text(ctx, "${ParsingUtils.formatMoney(c.result.perHour)}/h", 14 * scale, COLOR_CINZA, false),
+            paramsTop(dp(2))
+        )
+        root.addView(
+            text(ctx, "NOTA ${c.result.score}/100", 12 * scale, levelColor, true),
+            paramsTop(dp(2))
+        )
+
+        if (expanded) {
+            root.addView(text(ctx, "Valor  ${ParsingUtils.formatMoney(c.data.fare)}", 11 * scale, COLOR_BRANCO, false), paramsTop(dp(6)))
+            root.addView(text(ctx, "Distancia  ${ParsingUtils.formatKm(c.result.totalKm)}", 11 * scale, COLOR_CINZA, false), paramsTop(dp(2)))
+            root.addView(text(ctx, "Tempo  ${ParsingUtils.formatMin(c.result.totalMin)}", 11 * scale, COLOR_CINZA, false), paramsTop(dp(2)))
+            if (c.suspicious) {
+                root.addView(text(ctx, "Dados suspeitos", 10 * scale, COLOR_VERMELHO, true), paramsTop(dp(6)))
+            }
+        }
+
+        try {
+            wm?.updateViewLayout(root, params)
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun text(ctx: Context, s: String, sizeSp: Float, color: Int, bold: Boolean): TextView {
+        return TextView(ctx).apply {
+            text = s
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, sizeSp)
+            setTextColor(color)
+            typeface = if (bold) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
+            includeFontPadding = false
+        }
+    }
+
+    private fun paramsTop(marginDp: Int): LinearLayout.LayoutParams {
+        return LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        ).apply {
+            topMargin = dp(marginDp)
+        }
+    }
+
+    private fun cleanup() {
+        val v = view
+        view = null
+        params = null
         content = null
         expanded = false
         AppState.updateOverlayVisible(false)
-        val v = composeView ?: return
-        composeView = null
-        params = null
-        try {
-            wm?.removeView(v)
-        } catch (_: Exception) {
-        }
-    }
-
-    fun toggleExpanded() {
-        expanded = !expanded
-    }
-
-    fun moveBy(dx: Int, dy: Int) {
-        val p = params ?: return
-        p.x += dx
-        p.y += dy
-        try {
-            wm?.updateViewLayout(composeView, p)
-        } catch (_: Exception) {
-        }
-        contextRef?.get()?.let { ctx ->
-            Prefs(ctx).let { prefs ->
-                prefs.overlayPositionX = p.x
-                prefs.overlayPositionY = p.y
+        if (v != null) {
+            try {
+                wm?.removeView(v)
+            } catch (_: Exception) {
             }
         }
     }
@@ -143,10 +236,7 @@ object OverlayManager {
     private fun scheduleHide(ctx: Context) {
         val runnable = Runnable { hide() }
         hideRunnable = runnable
-        Handler(Looper.getMainLooper()).postDelayed(
-            runnable,
-            Prefs(ctx).overlayShowSeconds * 1000L
-        )
+        Handler(Looper.getMainLooper()).postDelayed(runnable, Prefs(ctx).overlayShowSeconds * 1000L)
     }
 
     private fun buildParams(ctx: Context): WindowManager.LayoutParams {
@@ -155,18 +245,21 @@ object OverlayManager {
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
-            PixelFormat.TRANSLUCENT
+            android.graphics.PixelFormat.TRANSLUCENT
         )
         p.gravity = Gravity.TOP or Gravity.START
         val prefs = Prefs(ctx)
         p.x = if (prefs.overlayPositionX == Int.MIN_VALUE) {
-            val dp = ctx.resources.displayMetrics.density
-            (ctx.resources.displayMetrics.widthPixels / 2 - 140 * dp).toInt()
+            (ctx.resources.displayMetrics.widthPixels / 2 - dp(140)).toInt()
         } else {
             prefs.overlayPositionX
         }
         p.y = prefs.overlayPositionY
         return p
+    }
+
+    private fun dp(v: Int): Int {
+        return (v * density).roundToInt()
     }
 
     private fun beepAndVibrate(context: Context) {
@@ -182,127 +275,6 @@ object OverlayManager {
                 vib.vibrate(VibrationEffect.createOneShot(200, VibrationEffect.DEFAULT_AMPLITUDE))
             }
         } catch (_: Exception) {
-        }
-    }
-
-    @Composable
-    fun OverlayCard() {
-        val c = content ?: return
-        val isExpanded = expanded
-        val context = LocalContext.current
-        val density = LocalDensity.current
-        val prefs = remember { Prefs(context) }
-        val fontScale = remember { prefs.overlayFontSize / 13f }
-
-        var drag by remember { mutableStateOf(IntOffset.Zero) }
-
-        val levelColor = when (c.result.level) {
-            Level.EXCELLENT, Level.GOOD -> Color(0xFF31F900)
-            Level.MEDIUM -> Color(0xFFF5A623)
-            Level.BAD -> Color(0xFFFF4D4D)
-        }
-
-        Box(
-            modifier = Modifier
-                .alpha(prefs.overlayOpacity)
-                .offset { drag }
-                .pointerInput(Unit) {
-                    detectDragGestures(
-                        onDrag = { change, amount ->
-                            change.consume()
-                            drag = IntOffset(
-                                drag.x + amount.x.roundToInt(),
-                                drag.y + amount.y.roundToInt()
-                            )
-                        },
-                        onDragEnd = {
-                            OverlayManager.moveBy(drag.x, drag.y)
-                            drag = IntOffset.Zero
-                        }
-                    )
-                }
-                .clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null
-                ) { OverlayManager.toggleExpanded() }
-                .background(Color(0xFF0E0F12), RoundedCornerShape(14.dp))
-                .border(2.dp, levelColor, RoundedCornerShape(14.dp))
-                .padding(horizontal = 14.dp, vertical = 10.dp)
-                .animateContentSize()
-        ) {
-            Column(
-                modifier = Modifier.width(((if (isExpanded) 250 else 220) * fontScale).dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.Center
-                ) {
-                    Text(
-                        "DRIVEWIN",
-                        color = Color(0xFFC864AF),
-                        fontSize = (11 * fontScale).sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        c.result.level.label,
-                        color = Color(0xFF0E0F12),
-                        fontSize = (10 * fontScale).sp,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier
-                            .background(levelColor, RoundedCornerShape(6.dp))
-                            .padding(horizontal = 6.dp, vertical = 2.dp)
-                    )
-                }
-
-                Spacer(Modifier.height(6.dp))
-
-                Text(
-                    "${ParsingUtils.formatMoney(c.result.perKm)}/km",
-                    color = Color.White,
-                    fontSize = (20 * fontScale).sp,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    "${ParsingUtils.formatMoney(c.result.perHour)}/h",
-                    color = Color(0xFFC8C8C8),
-                    fontSize = (14 * fontScale).sp,
-                    fontWeight = FontWeight.SemiBold
-                )
-                Text(
-                    "NOTA ${c.result.score}/100",
-                    color = levelColor,
-                    fontSize = (12 * fontScale).sp,
-                    fontWeight = FontWeight.Bold
-                )
-
-                if (isExpanded) {
-                    Spacer(Modifier.height(8.dp))
-                    InfoRow("Valor", ParsingUtils.formatMoney(c.data.fare), fontScale, Color.White)
-                    InfoRow("Distancia", ParsingUtils.formatKm(c.result.totalKm), fontScale, Color(0xFFC8C8C8))
-                    InfoRow("Tempo", ParsingUtils.formatMin(c.result.totalMin), fontScale, Color(0xFFC8C8C8))
-                    if (c.suspicious) {
-                        Spacer(Modifier.height(6.dp))
-                        Text(
-                            "Dados suspeitos",
-                            color = Color(0xFFFF4D4D),
-                            fontSize = (10 * fontScale).sp
-                        )
-                    }
-                }
-            }
-        }
-    }
-
-    @Composable
-    private fun InfoRow(label: String, value: String, fontScale: Float, color: Color) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Text(label, color = Color(0xFF888888), fontSize = (11 * fontScale).sp)
-            Text(value, color = color, fontSize = (12 * fontScale).sp, fontWeight = FontWeight.Medium)
         }
     }
 }
