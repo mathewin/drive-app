@@ -1,8 +1,10 @@
 package com.example.calculadoraganhos
 
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.os.PowerManager
 import android.provider.Settings
 import android.view.LayoutInflater
 import android.view.View
@@ -39,6 +41,24 @@ class LeituraFragment : Fragment() {
                 )
             }
         }
+        view.findViewById<Button>(R.id.btnBateriaLeitura).setOnClickListener {
+            val ctx = requireContext()
+            val pm = ctx.getSystemService(Context.POWER_SERVICE) as PowerManager
+            if (pm.isIgnoringBatteryOptimizations(ctx.packageName)) {
+                Toast.makeText(ctx, "Bateria ja isenta", Toast.LENGTH_SHORT).show()
+            } else {
+                try {
+                    startActivity(
+                        Intent(
+                            Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                            Uri.parse("package:${ctx.packageName}")
+                        )
+                    )
+                } catch (e: Exception) {
+                    startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+                }
+            }
+        }
         view.findViewById<Button>(R.id.btnIniciarLeitura).setOnClickListener {
             val a11y = servicoAtivo()
             val ov = Settings.canDrawOverlays(requireContext())
@@ -61,13 +81,17 @@ class LeituraFragment : Fragment() {
         val ctx = requireContext()
         val a11y = servicoAtivo()
         val ov = Settings.canDrawOverlays(ctx)
+        val pm = ctx.getSystemService(Context.POWER_SERVICE) as PowerManager
+        val bateriaOk = pm.isIgnoringBatteryOptimizations(ctx.packageName)
 
         view?.findViewById<TextView>(R.id.tvStatus)?.text =
             if (a11y && ov) "AGUARDANDO CORRIDA" else "CONFIGURE AS PERMISSOES"
         view?.findViewById<TextView>(R.id.tvA11yLeitura)?.text = if (a11y) "Ativa" else "Desativada"
         view?.findViewById<TextView>(R.id.tvOverlayLeitura)?.text = if (ov) "Permitida" else "Nao permitida"
+        view?.findViewById<TextView>(R.id.tvBateriaLeitura)?.text = if (bateriaOk) "Isenta" else "Ativa"
         view?.findViewById<Button>(R.id.btnA11yLeitura)?.text = if (a11y) "OK" else "Conceder"
         view?.findViewById<Button>(R.id.btnOverlayLeitura)?.text = if (ov) "OK" else "Conceder"
+        view?.findViewById<Button>(R.id.btnBateriaLeitura)?.text = if (bateriaOk) "OK" else "Isentar"
 
         val last = RideHistory(ctx).rides().firstOrNull()
         val lastApp = view?.findViewById<TextView>(R.id.tvLastApp)

@@ -1,6 +1,7 @@
 package com.example.calculadoraganhos
 
 import android.accessibilityservice.AccessibilityService
+import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 
@@ -8,6 +9,12 @@ class CalculatorService : AccessibilityService() {
 
     private var lastHash: String? = null
     private var lastParseMs = 0L
+    private var lastShownKey: String? = null
+
+    override fun onServiceConnected() {
+        super.onServiceConnected()
+        Log.d("DriveWin", "service connected")
+    }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         val root = rootInActiveWindow ?: return
@@ -33,10 +40,23 @@ class CalculatorService : AccessibilityService() {
         lastHash = hash
 
         val cardTexts = offerCardTexts(root)
-        val data = cardTexts?.let { RideCardParser.parse(it) } ?: return
+        if (cardTexts == null) {
+            Log.d("DriveWin", "pkg=$pkg oferta detectada mas sem card")
+            return
+        }
+        val data = RideCardParser.parse(cardTexts)
+        if (data == null) {
+            Log.w("DriveWin", "pkg=$pkg parse falhou textos=$cardTexts")
+            return
+        }
 
         val prefs = Prefs(this)
         val res = Calculator.calculate(data, prefs.minPerKm, prefs.minPerHour)
+
+        val key = "${data.fare}|${data.km}|${data.minutes}"
+        if (key == lastShownKey) return
+        lastShownKey = key
+
         OverlayManager.show(this, pkg, cardTexts, data, res)
         RideHistory(this).addRide(appLabel(pkg), data.fare, data.km, data.minutes)
     }

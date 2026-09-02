@@ -36,6 +36,7 @@ class CalculoFragment : Fragment() {
         val spinner = view.findViewById<Spinner>(R.id.spPosicao)
         val cbPerKm = view.findViewById<CheckBox>(R.id.cbPerKm)
         val cbPerH = view.findViewById<CheckBox>(R.id.cbPerH)
+        val cbAlerta = view.findViewById<CheckBox>(R.id.cbAlerta)
 
         sbPerKm.max = 100
         sbPerH.max = 100
@@ -58,6 +59,7 @@ class CalculoFragment : Fragment() {
         spinner.setSelection(if (prefs.overlayPosition == "baixo") 2 else if (prefs.overlayPosition == "meio") 1 else 0)
         cbPerKm.isChecked = prefs.showPerKm
         cbPerH.isChecked = prefs.showPerHour
+        cbAlerta.isChecked = prefs.overlayAlert
 
         fun refresh() {
             tvPerKm.text = "${OverlayManager.formatMoney(prefs.minPerKm)}/km"
@@ -122,6 +124,7 @@ class CalculoFragment : Fragment() {
 
         cbPerKm.setOnCheckedChangeListener { _, b -> prefs.showPerKm = b }
         cbPerH.setOnCheckedChangeListener { _, b -> prefs.showPerHour = b }
+        cbAlerta.setOnCheckedChangeListener { _, b -> prefs.overlayAlert = b }
 
         view.findViewById<Button>(R.id.btnTestarCardCalc).setOnClickListener {
             val d = RideData(42.37, 15.0, 25.0)

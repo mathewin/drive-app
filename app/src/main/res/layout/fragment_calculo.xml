@@ -171,6 +171,12 @@
             android:layout_height="wrap_content"
             android:text="Mostrar R\$/h" />
 
+        <CheckBox
+            android:id="@+id/cbAlerta"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Alerta sonoro + vibracao ao detectar" />
+
         <Button
             android:id="@+id/btnTestarCardCalc"
             android:layout_width="match_parent"

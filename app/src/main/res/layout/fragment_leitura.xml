@@ -33,7 +33,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="4dp"
             android:gravity="center"
-            android:text="O card aparece automaticamente em cada oferta e some em 7 segundos"
+            android:text="O card aparece automaticamente em cada oferta e some em poucos segundos"
             android:textSize="13sp" />
 
         <TextView
@@ -100,6 +100,35 @@
                 android:layout_marginStart="8dp"
                 android:minHeight="36dp"
                 android:text="Conceder" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Otimizacao de bateria" />
+
+            <TextView
+                android:id="@+id/tvBateriaLeitura"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Ativa"
+                android:textSize="13sp" />
+
+            <Button
+                android:id="@+id/btnBateriaLeitura"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:minHeight="36dp"
+                android:text="Isentar" />
         </LinearLayout>
 
         <Button

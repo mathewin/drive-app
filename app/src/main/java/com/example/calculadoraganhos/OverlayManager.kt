@@ -4,8 +4,13 @@ import android.content.Context
 import android.graphics.PixelFormat
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
+import android.media.AudioManager
+import android.media.ToneGenerator
 import android.os.Handler
 import android.os.Looper
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.util.Log
 import android.view.Gravity
 import android.view.View
 import android.view.WindowManager
@@ -60,7 +65,26 @@ object OverlayManager {
             card.alpha = prefs.overlayOpacity
             wm.addView(card, params)
             view = card
+            if (prefs.overlayAlert) beepAndVibrate(context)
+            Log.d("DriveWin", "overlay shown fare=${d.fare} km=${d.km} min=${d.minutes} verdict=${r.verdict}")
             scheduleHide(context, card, prefs.overlayShowSeconds * 1000L)
+        } catch (e: Exception) {
+            Log.w("DriveWin", "overlay fail: ${e.message}")
+        }
+    }
+
+    private fun beepAndVibrate(context: Context) {
+        try {
+            val tg = ToneGenerator(AudioManager.STREAM_NOTIFICATION, 80)
+            tg.startTone(ToneGenerator.TONE_PROP_BEEP, 150)
+            tg.release()
+        } catch (_: Exception) {
+        }
+        try {
+            val vib = context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
+            if (vib?.hasVibrator() == true) {
+                vib.vibrate(VibrationEffect.createOneShot(200, VibrationEffect.DEFAULT_AMPLITUDE))
+            }
         } catch (_: Exception) {
         }
     }

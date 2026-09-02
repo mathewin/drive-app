@@ -36,4 +36,8 @@ class Prefs(context: Context) {
     var showPerHour: Boolean
         get() = sp.getBoolean("ov_perh", true)
         set(v) = sp.edit().putBoolean("ov_perh", v).apply()
+
+    var overlayAlert: Boolean
+        get() = sp.getBoolean("ov_alert", true)
+        set(v) = sp.edit().putBoolean("ov_alert", v).apply()
 }
