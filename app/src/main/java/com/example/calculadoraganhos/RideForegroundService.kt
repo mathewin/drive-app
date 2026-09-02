@@ -13,8 +13,17 @@ class RideForegroundService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        startInForeground()
-        return START_STICKY
+        return try {
+            startInForeground()
+            START_STICKY
+        } catch (e: Throwable) {
+            android.util.Log.w("DriveWin", "fgs startForeground fail: ${e.message}")
+            try {
+                stopSelf()
+            } catch (_: Exception) {
+            }
+            START_NOT_STICKY
+        }
     }
 
     private fun startInForeground() {
