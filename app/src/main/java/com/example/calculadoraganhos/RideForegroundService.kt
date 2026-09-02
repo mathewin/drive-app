@@ -15,9 +15,11 @@ class RideForegroundService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         return try {
             startInForeground()
+            DriveWinLog.log("fgs", "servico em primeiro plano ativo (notificacao DriveWin)")
             START_STICKY
         } catch (e: Throwable) {
             android.util.Log.w("DriveWin", "fgs startForeground fail: ${e.message}")
+            DriveWinLog.log("fgs", "ERRO ao subir FGS: ${e.message}")
             try {
                 stopSelf()
             } catch (_: Exception) {

@@ -45,6 +45,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.calculadoraganhos.AppState
 import com.example.calculadoraganhos.CalculatorService
+import com.example.calculadoraganhos.DriveWinLog
 import com.example.calculadoraganhos.OcrFallback
 import com.example.calculadoraganhos.ParsingUtils
 import com.example.calculadoraganhos.Prefs
@@ -184,6 +185,31 @@ private fun LeituraScreen(
                 color = RosaLilas, fontSize = 11.sp
             )
         }
+
+        Spacer(Modifier.height(24.dp))
+        SectionTitle("LOG (O QUE O APP VE)")
+        Spacer(Modifier.height(8.dp))
+        val lines = remember(tick) { DriveWinLog.lines() }
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(12.dp))
+                .padding(12.dp)
+        ) {
+            if (lines.isEmpty()) {
+                Text(
+                    "Sem eventos ainda. Abra a Uber ou a 99 com o monitor LIGADO.",
+                    color = Color(0xFF8A8A8A), fontSize = 12.sp
+                )
+            } else {
+                Column {
+                    lines.takeLast(26).forEach { l ->
+                        Text(l, color = Color(0xFF9FB39F), fontSize = 10.sp, lineHeight = 14.sp)
+                    }
+                }
+            }
+        }
+        Spacer(Modifier.height(24.dp))
     }
 }
 

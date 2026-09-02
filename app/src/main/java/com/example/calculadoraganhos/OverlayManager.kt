@@ -87,15 +87,18 @@ object OverlayManager {
                 wm?.addView(view, p)
             } catch (e: Exception) {
                 Log.w("DriveWin", "overlay addView fail: ${e.message}")
+                DriveWinLog.log("ovl", "ERRO ao criar card na tela: ${e.message}")
                 return
             }
             composeView = view
             params = p
+            DriveWinLog.log("ovl", "card criado na tela (overlay ok)")
         }
         content = c
         AppState.updateOverlayVisible(true)
         if (beep) beepAndVibrate(ctx)
         scheduleHide(ctx)
+        DriveWinLog.log("ovl", "card atualizado: ${c.app} ${c.data.fare}km=${c.data.totalDistanceKm} min=${c.data.totalTimeMin}")
     }
 
     fun hide() {

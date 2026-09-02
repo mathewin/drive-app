@@ -96,11 +96,13 @@ class MainActivity : ComponentActivity() {
             val overlay = Settings.canDrawOverlays(this)
             if (!a11y) {
                 toast("Abra a Acessibilidade e ligue o DriveWin")
+                DriveWinLog.log("app", "LIGAR: acessibilidade desativada")
                 startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
                 return
             }
             if (!overlay) {
                 toast("Permita a sobreposicao do DriveWin")
+                DriveWinLog.log("app", "LIGAR: sobreposicao nao permitida")
                 startActivity(
                     Intent(
                         Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
@@ -110,6 +112,7 @@ class MainActivity : ComponentActivity() {
                 return
             }
             Prefs(this).monitorOn = true
+            DriveWinLog.log("app", "LIGADO - leitura ativa")
             toast("Monitoramento LIGADO - abra a Uber ou a 99")
             if (Build.VERSION.SDK_INT >= 33 &&
                 ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
@@ -121,6 +124,7 @@ class MainActivity : ComponentActivity() {
             }
         } else {
             Prefs(this).monitorOn = false
+            DriveWinLog.log("app", "DESLIGADO")
             RideForegroundService.stop(this)
             OverlayManager.hide()
             toast("Monitoramento DESLIGADO")
@@ -135,6 +139,7 @@ class MainActivity : ComponentActivity() {
         val prefs = Prefs(this)
         val data = RideData(fare = 25.0, totalKm = 8.0, totalMin = 20.0)
         val res = Calculator.calculate(data, prefs.minPerKm, prefs.minPerHour)
+        DriveWinLog.log("app", "TESTE do card solicitado")
         OverlayManager.show(
             this,
             OverlayManager.OverlayContent(data, res, "TESTE", false, 1.0),

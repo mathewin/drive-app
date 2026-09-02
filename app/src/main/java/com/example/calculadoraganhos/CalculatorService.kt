@@ -16,17 +16,33 @@ class CalculatorService : AccessibilityService() {
     private var pending: ParsedCard? = null
     private var pendingMs = 0L
     private var ocrAttempted = false
+    private var lastCtxTag = ""
+    private var lastCtxMs = 0L
+
+    private fun logCtx(pkg: String, isUber: Boolean, msg: String) {
+        val now = System.currentTimeMillis()
+        val tag = if (isUber) "uber" else "99"
+        if (tag != lastCtxTag || now - lastCtxMs > 2500) {
+            lastCtxTag = tag
+            lastCtxMs = now
+            DriveWinLog.log("calc", msg)
+        }
+    }
 
     override fun onServiceConnected() {
         super.onServiceConnected()
-        Log.d(TAG, "service connected")
+        DriveWinLog.log("calc", "servico de acessibilidade conectado")
         setState(State.IDLE)
         if (Prefs(this).monitorOn) {
+            DriveWinLog.log("calc", "monitor ligado - subindo FGS")
             try {
                 RideForegroundService.start(this)
             } catch (e: Exception) {
                 Log.w(TAG, "fgs start: ${e.message}")
+                DriveWinLog.log("calc", "falha ao subir FGS: ${e.message}")
             }
+        } else {
+            DriveWinLog.log("calc", "monitor DESLIGADO - sem leitura")
         }
     }
 
@@ -40,11 +56,15 @@ class CalculatorService : AccessibilityService() {
         val isUber = pkg.contains("com.ubercab")
         val isNinetyNine = pkg.contains("br.com.taxiapp")
         if (!isUber && !isNinetyNine) {
-            if (state == State.DISPLAYING) OverlayManager.hide()
+            if (state == State.DISPLAYING) {
+                OverlayManager.hide()
+                DriveWinLog.log("calc", "saiu do app de corrida - card escondido")
+            }
             setState(State.IDLE)
             return
         }
 
+        logCtx(pkg, isUber, "vendo ${if (isUber) "UBER" else "99"} - aguardando oferta")
         val now = System.currentTimeMillis()
         if (now - lastEventMs < DEBOUNCE_MS) return
         lastEventMs = now
@@ -53,6 +73,7 @@ class CalculatorService : AccessibilityService() {
         val items = collect(root)
         val texts = items.map { it.text }
         if (items.isEmpty() || !ParsingUtils.offerContext(texts)) {
+            logCtx(pkg, isUber, "app aberto SEM oferta visivel (estado $state)")
             setState(State.IDLE)
             return
         }
@@ -61,13 +82,15 @@ class CalculatorService : AccessibilityService() {
         val parser = if (isUber) UberParser else NinetyNineParser
         val card = parser.parse(items)
         if (card == null) {
+            DriveWinLog.log("calc", "parse direto falhou (textos: ${texts.size})")
             if (!ocrAttempted) {
                 ocrAttempted = true
-                Log.d(TAG, "direct read falhou, tentando OCR")
+                DriveWinLog.log("calc", "tentando OCR (se autorizado)")
                 OcrFallback.tryCaptureAndParse(
                     this,
                     parser = { parser.parse(it) }
                 ) { ocrCard, _ ->
+                    DriveWinLog.log("calc", "OCR retornou card - validando")
                     handleCard(ocrCard, isUber, System.currentTimeMillis())
                 }
             }
@@ -80,6 +103,7 @@ class CalculatorService : AccessibilityService() {
     }
 
     override fun onDestroy() {
+        DriveWinLog.log("calc", "servico destruido")
         OverlayManager.hide()
         try {
             RideForegroundService.stop(this)
@@ -104,10 +128,21 @@ class CalculatorService : AccessibilityService() {
     }
 
     private fun displayIfNew(card: ParsedCard, isUber: Boolean) {
-        if (!Validator.isValid(card.data)) return
+        if (!Validator.isValid(card.data)) {
+            DriveWinLog.log(
+                "calc",
+                "dados rejeitados pelo validador: fare=${card.data.fare} " +
+                    "km=${card.data.totalDistanceKm} min=${card.data.totalTimeMin} " +
+                    "pickupKm=${card.data.pickupKm} tripKm=${card.data.tripKm} suspeito=${card.suspicious}"
+            )
+            return
+        }
         val data = card.data
         val hash = "${data.fare}|${data.totalDistanceKm}|${data.totalTimeMin}"
-        if (hash == lastHash) return
+        if (hash == lastHash) {
+            DriveWinLog.log("calc", "oferta repetida ignorada")
+            return
+        }
         lastHash = hash
         ocrAttempted = false
 
@@ -118,6 +153,10 @@ class CalculatorService : AccessibilityService() {
 
         setState(State.CALCULATING)
         setState(State.DISPLAYING)
+        DriveWinLog.log(
+            "calc",
+            "MOSTRANDO CARD: $app R\$${data.fare} ${data.totalDistanceKm}km ${data.totalTimeMin}min"
+        )
         OverlayManager.show(
             this,
             OverlayManager.OverlayContent(data, res, app, card.suspicious, card.confidence),
