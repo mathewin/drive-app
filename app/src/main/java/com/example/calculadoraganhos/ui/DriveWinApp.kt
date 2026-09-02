@@ -4,6 +4,7 @@ import android.content.Context
 import android.os.PowerManager
 import android.provider.Settings
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -45,6 +46,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.calculadoraganhos.AppState
 import com.example.calculadoraganhos.CalculatorService
+import com.example.calculadoraganhos.CrashReport
 import com.example.calculadoraganhos.DriveWinLog
 import com.example.calculadoraganhos.OcrFallback
 import com.example.calculadoraganhos.ParsingUtils
@@ -189,6 +191,41 @@ private fun LeituraScreen(
         Spacer(Modifier.height(24.dp))
         SectionTitle("LOG (O QUE O APP VE)")
         Spacer(Modifier.height(8.dp))
+        val crash = remember(tick) { CrashReport.last(ctx) }
+        if (crash != null) {
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .background(Color(0xFF3A1010), RoundedCornerShape(12.dp))
+                    .border(1.dp, Color(0xFFFF4D4D), RoundedCornerShape(12.dp))
+                    .padding(12.dp)
+            ) {
+                Column {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            "ULTIMO CRASH",
+                            color = Color(0xFFFF6B6B),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Button(
+                            onClick = { CrashReport.clear(ctx) },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                contentColor = Color(0xFFE8E8E8)
+                            ),
+                            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp, vertical = 0.dp)
+                        ) {
+                            Text("Apagar", fontSize = 11.sp)
+                        }
+                    }
+                    Spacer(Modifier.height(6.dp))
+                    Text(crash, color = Color(0xFFFFB3B3), fontSize = 10.sp)
+                }
+            }
+            Spacer(Modifier.height(12.dp))
+        }
         val lines = remember(tick) { DriveWinLog.lines() }
         Box(
             Modifier

@@ -40,6 +40,14 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val prevHandler = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
+            try {
+                CrashReport.save(this, throwable)
+            } catch (_: Exception) {
+            }
+            prevHandler?.uncaughtException(thread, throwable)
+        }
         enableEdgeToEdge()
         setContent {
             DriveWinTheme {

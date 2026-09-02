@@ -75,30 +75,34 @@ object OverlayManager {
     private var beepedHash: String? = null
 
     fun show(context: Context, c: OverlayContent, beep: Boolean) {
-        val ctx = context.applicationContext
-        if (composeView == null) {
-            contextRef = WeakReference(ctx)
-            wm = ctx.getSystemService(Context.WINDOW_SERVICE) as? WindowManager
-            val view = ComposeView(ctx).apply {
-                setContent { OverlayCard() }
-            }
-            val p = buildParams(ctx)
-            try {
-                wm?.addView(view, p)
-            } catch (e: Exception) {
-                Log.w("DriveWin", "overlay addView fail: ${e.message}")
-                DriveWinLog.log("ovl", "ERRO ao criar card na tela: ${e.message}")
-                return
-            }
-            composeView = view
-            params = p
-            DriveWinLog.log("ovl", "card criado na tela (overlay ok)")
-        }
         content = c
-        AppState.updateOverlayVisible(true)
-        if (beep) beepAndVibrate(ctx)
-        scheduleHide(ctx)
-        DriveWinLog.log("ovl", "card atualizado: ${c.app} ${c.data.fare}km=${c.data.totalDistanceKm} min=${c.data.totalTimeMin}")
+        try {
+            val ctx = context.applicationContext
+            if (composeView == null) {
+                contextRef = WeakReference(ctx)
+                wm = ctx.getSystemService(Context.WINDOW_SERVICE) as? WindowManager
+                val view = ComposeView(ctx).apply {
+                    setContent { OverlayCard() }
+                }
+                val p = buildParams(ctx)
+                wm?.addView(view, p)
+                composeView = view
+                params = p
+                DriveWinLog.log("ovl", "card criado na tela (overlay ok)")
+            }
+            AppState.updateOverlayVisible(true)
+            if (beep) beepAndVibrate(ctx)
+            scheduleHide(ctx)
+            DriveWinLog.log(
+                "ovl",
+                "card atualizado: ${c.app} ${c.data.fare}km=${c.data.totalDistanceKm} min=${c.data.totalTimeMin}"
+            )
+        } catch (t: Throwable) {
+            DriveWinLog.log("ovl", "ERRO no overlay: ${t.message}")
+            content = null
+            composeView = null
+            params = null
+        }
     }
 
     fun hide() {
