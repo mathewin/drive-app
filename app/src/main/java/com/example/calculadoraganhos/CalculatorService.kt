@@ -42,6 +42,20 @@ class CalculatorService : AccessibilityService() {
         }
     }
 
+    private fun tryOcr(parser: CardParserBase, isUber: Boolean) {
+        if (ocrAttempted) return
+        ocrAttempted = true
+        DriveWinLog.log("calc", "tentando OCR (se autorizado)")
+        OcrFallback.tryCaptureAndParse(
+            this,
+            parser = { parser.parse(it) }
+        ) { ocrCard, ocrItems ->
+            DriveWinLog.log("calc", "OCR retornou card - validando")
+            if (ocrItems.isNotEmpty()) dumpTexts("ocr", ocrItems)
+            handleCard(ocrCard, isUber, System.currentTimeMillis())
+        }
+    }
+
     override fun onServiceConnected() {
         super.onServiceConnected()
         DriveWinLog.log("calc", "servico de acessibilidade conectado")
@@ -73,6 +87,7 @@ class CalculatorService : AccessibilityService() {
                 OverlayManager.hide()
                 DriveWinLog.log("calc", "saiu do app de corrida - card escondido")
             }
+            ocrAttempted = false
             setState(State.IDLE)
             return
         }
@@ -85,30 +100,35 @@ class CalculatorService : AccessibilityService() {
         setState(State.DETECTING)
         val items = collect(root)
         val texts = items.map { it.text }
-        if (items.isEmpty() || !ParsingUtils.offerContext(texts)) {
+        val parser = if (isUber) UberParser else NinetyNineParser
+        if (items.isEmpty()) {
             logCtx(pkg, isUber, "app aberto SEM oferta visivel (estado $state)")
             setState(State.IDLE)
             return
         }
+        val hasWords = ParsingUtils.offerContext(texts)
+        val hasMoney = ParsingUtils.hasMoney(texts)
+        val hasKmOrMin = ParsingUtils.kmValues(texts).isNotEmpty() ||
+            ParsingUtils.minutesValues(texts).isNotEmpty()
+        if (!hasWords) {
+            if (hasMoney && hasKmOrMin) {
+                logCtx(pkg, isUber, "valor+km/min sem palavra de oferta - dump + OCR")
+                dumpTexts("a11y", items)
+                tryOcr(parser, isUber)
+                setState(State.IDLE)
+            } else {
+                logCtx(pkg, isUber, "app aberto SEM oferta visivel (estado $state)")
+                setState(State.IDLE)
+            }
+            return
+        }
 
         setState(State.READING)
-        val parser = if (isUber) UberParser else NinetyNineParser
         val card = parser.parse(items)
         if (card == null) {
             DriveWinLog.log("calc", "parse direto falhou (textos: ${texts.size})")
             dumpTexts("a11y", items)
-            if (!ocrAttempted) {
-                ocrAttempted = true
-                DriveWinLog.log("calc", "tentando OCR (se autorizado)")
-                OcrFallback.tryCaptureAndParse(
-                    this,
-                    parser = { parser.parse(it) }
-                ) { ocrCard, ocrItems ->
-                    DriveWinLog.log("calc", "OCR retornou card - validando")
-                    if (ocrItems.isNotEmpty()) dumpTexts("ocr", ocrItems)
-                    handleCard(ocrCard, isUber, System.currentTimeMillis())
-                }
-            }
+            tryOcr(parser, isUber)
             return
         }
         handleCard(card, isUber, now)

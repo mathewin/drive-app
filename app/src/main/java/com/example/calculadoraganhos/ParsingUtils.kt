@@ -117,11 +117,16 @@ object ParsingUtils {
         }
     }
 
+    fun hasMoney(texts: List<String>): Boolean = texts.any { it.contains('$') }
+
     val OFFER_WORDS = listOf(
-        "aceitar", "aceite", "aceito", "recusar", "recuse", "descartar", "rejeitar",
+        "aceitar", "aceite", "aceito", "accept", "accepted", "accept ride",
+        "recusar", "recuse", "decline", "descartar", "rejeitar",
         "nova corrida", "nova solicita", "novo pedido", "nova chamada",
+        "new request", "new trip", "ride request", "nova oferta", "new offer",
         "chegou uma corrida", "solicitacao de corrida", "pedido novo",
-        "oferta de corrida", "selecionar", "escolher", "reservar",
-        "radar de viagens", "aceitar corrida", "pegar corrida"
+        "oferta de corrida", "selecionar", "escolher", "reservar", "book",
+        "radar de viagens", "aceitar corrida", "pegar corrida",
+        "toque para aceitar", "tocar para aceitar", "disponivel para voce"
     )
 }
