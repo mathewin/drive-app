@@ -6,23 +6,27 @@ class Prefs(context: Context) {
     private val sp = context.getSharedPreferences("drivewin", Context.MODE_PRIVATE)
 
     var minPerKm: Double
-        get() = sp.getFloat("min_km", 1.5f).toDouble()
+        get() = sp.getFloat("min_km", 2.0f).toDouble()
         set(v) = sp.edit().putFloat("min_km", v.toFloat()).apply()
 
     var minPerHour: Double
         get() = sp.getFloat("min_h", 40f).toDouble()
         set(v) = sp.edit().putFloat("min_h", v.toFloat()).apply()
 
-    var overlayPosition: String
-        get() = sp.getString("ov_pos", "topo") ?: "topo"
-        set(v) = sp.edit().putString("ov_pos", v).apply()
+    var overlayPositionX: Int
+        get() = sp.getInt("ov_x", Int.MIN_VALUE)
+        set(v) = sp.edit().putInt("ov_x", v).apply()
+
+    var overlayPositionY: Int
+        get() = sp.getInt("ov_y", 40)
+        set(v) = sp.edit().putInt("ov_y", v).apply()
 
     var overlayOpacity: Float
         get() = sp.getFloat("ov_opac", 1f)
         set(v) = sp.edit().putFloat("ov_opac", v).apply()
 
     var overlayFontSize: Float
-        get() = sp.getFloat("ov_font", 14f)
+        get() = sp.getFloat("ov_font", 13f)
         set(v) = sp.edit().putFloat("ov_font", v).apply()
 
     var overlayShowSeconds: Int
@@ -37,7 +41,19 @@ class Prefs(context: Context) {
         get() = sp.getBoolean("ov_perh", true)
         set(v) = sp.edit().putBoolean("ov_perh", v).apply()
 
+    var showScore: Boolean
+        get() = sp.getBoolean("ov_score", true)
+        set(v) = sp.edit().putBoolean("ov_score", v).apply()
+
     var overlayAlert: Boolean
         get() = sp.getBoolean("ov_alert", true)
         set(v) = sp.edit().putBoolean("ov_alert", v).apply()
+
+    var ocrEnabled: Boolean
+        get() = sp.getBoolean("ocr_enabled", false)
+        set(v) = sp.edit().putBoolean("ocr_enabled", v).apply()
+
+    var lastOffer: String?
+        get() = sp.getString("last_offer", null)
+        set(v) = sp.edit().putString("last_offer", v).apply()
 }

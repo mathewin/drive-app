@@ -1,5 +1,6 @@
 plugins {
     alias(libs.plugins.android.application)
+    alias(libs.plugins.kotlin.compose)
 }
 
 android {
@@ -10,8 +11,8 @@ android {
         applicationId = "com.example.calculadoraganhos"
         minSdk = 26
         targetSdk = 34
-        versionCode = 2
-        versionName = "0.2"
+        versionCode = 3
+        versionName = "1.0"
     }
 
     buildTypes {
@@ -24,7 +25,7 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
     buildFeatures {
-        viewBinding = true
+        compose = true
     }
 }
 
@@ -36,9 +37,12 @@ kotlin {
 
 dependencies {
     implementation("androidx.core:core-ktx:1.13.1")
-    implementation("androidx.appcompat:appcompat:1.7.0")
-    implementation("com.google.android.material:material:1.12.0")
-    implementation("androidx.recyclerview:recyclerview:1.3.2")
+    implementation(platform(libs.compose.bom))
+    implementation(libs.compose.ui)
+    implementation(libs.compose.material3)
+    implementation(libs.compose.ui.tooling.preview)
+    implementation(libs.androidx.activity.compose)
+    implementation(libs.mlkit.text.recognition)
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

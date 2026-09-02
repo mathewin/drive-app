@@ -3,7 +3,6 @@ package com.example.calculadoraganhos
 import android.content.Context
 import android.graphics.PixelFormat
 import android.graphics.Typeface
-import android.graphics.drawable.GradientDrawable
 import android.media.AudioManager
 import android.media.ToneGenerator
 import android.os.Handler
@@ -12,65 +11,155 @@ import android.os.VibrationEffect
 import android.os.Vibrator
 import android.util.Log
 import android.view.Gravity
-import android.view.View
 import android.view.WindowManager
-import android.widget.LinearLayout
-import android.widget.TextView
-import java.text.NumberFormat
-import java.util.Locale
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import java.lang.ref.WeakReference
+import kotlin.math.roundToInt
 
 object OverlayManager {
 
-    private enum class Theme { NINETY_NINE, UBER, DEFAULT }
+    data class OverlayContent(
+        val data: RideData,
+        val result: CalcResult,
+        val app: String,
+        val suspicious: Boolean,
+        val confidence: Double
+    )
 
-    private var view: View? = null
+    var content by mutableStateOf<OverlayContent?>(null)
+        private set
+
+    var expanded by mutableStateOf(false)
+        private set
+
+    private var wm: WindowManager? = null
+    private var composeView: ComposeView? = null
+    private var params: WindowManager.LayoutParams? = null
+    private var contextRef: WeakReference<Context>? = null
     private var hideRunnable: Runnable? = null
+    private var beepedHash: String? = null
 
-    private val money: NumberFormat = NumberFormat.getCurrencyInstance(Locale("pt", "BR"))
-
-    fun formatMoney(v: Double): String = money.format(v)
-
-    fun verdictLabel(v: Int): String = when (v) {
-        CalcResult.GREEN -> "COMPENSA"
-        CalcResult.AMBER -> "NO LIMITE"
-        else -> "NAO COMPENSA"
+    fun show(context: Context, c: OverlayContent, beep: Boolean) {
+        val ctx = context.applicationContext
+        if (composeView == null) {
+            contextRef = WeakReference(ctx)
+            wm = ctx.getSystemService(Context.WINDOW_SERVICE) as? WindowManager
+            val view = ComposeView(ctx).apply {
+                setContent { OverlayCard() }
+            }
+            val p = buildParams(ctx)
+            try {
+                wm?.addView(view, p)
+            } catch (e: Exception) {
+                Log.w("DriveWin", "overlay addView fail: ${e.message}")
+                return
+            }
+            composeView = view
+            params = p
+        }
+        content = c
+        AppState.updateOverlayVisible(true)
+        if (beep) beepAndVibrate(ctx)
+        scheduleHide(ctx)
     }
 
-    fun verdictColor(v: Int): Int = when (v) {
-        CalcResult.GREEN -> 0xFF16A34A.toInt()
-        CalcResult.AMBER -> 0xFFF59E0B.toInt()
-        else -> 0xFFDC2626.toInt()
+    fun hide() {
+        hideRunnable?.let { Handler(Looper.getMainLooper()).removeCallbacks(it) }
+        hideRunnable = null
+        content = null
+        expanded = false
+        AppState.updateOverlayVisible(false)
+        val v = composeView ?: return
+        composeView = null
+        params = null
+        try {
+            wm?.removeView(v)
+        } catch (_: Exception) {
+        }
     }
 
-    fun show(context: Context, packageName: String?, texts: List<String>?, d: RideData, r: CalcResult) {
-        val wm = context.getSystemService(Context.WINDOW_SERVICE) as? WindowManager ?: return
-        hide(context)
-        val prefs = Prefs(context)
-        val card = buildCard(context, themeFor(packageName, texts), prefs, d, r)
-        val params = WindowManager.LayoutParams(
+    fun toggleExpanded() {
+        expanded = !expanded
+    }
+
+    fun moveBy(dx: Int, dy: Int) {
+        val p = params ?: return
+        p.x += dx
+        p.y += dy
+        try {
+            wm?.updateViewLayout(composeView, p)
+        } catch (_: Exception) {
+        }
+        contextRef?.get()?.let { ctx ->
+            Prefs(ctx).let { prefs ->
+                prefs.overlayPositionX = p.x
+                prefs.overlayPositionY = p.y
+            }
+        }
+    }
+
+    private fun scheduleHide(ctx: Context) {
+        val runnable = Runnable { hide() }
+        hideRunnable = runnable
+        Handler(Looper.getMainLooper()).postDelayed(
+            runnable,
+            Prefs(ctx).overlayShowSeconds * 1000L
+        )
+    }
+
+    private fun buildParams(ctx: Context): WindowManager.LayoutParams {
+        val p = WindowManager.LayoutParams(
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
             PixelFormat.TRANSLUCENT
         )
-        val margin = (context.resources.displayMetrics.density * 40).toInt()
-        params.y = margin
-        params.gravity = when (prefs.overlayPosition) {
-            "baixo" -> Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
-            "meio" -> Gravity.CENTER
-            else -> Gravity.TOP or Gravity.CENTER_HORIZONTAL
+        p.gravity = Gravity.TOP or Gravity.START
+        val prefs = Prefs(ctx)
+        p.x = if (prefs.overlayPositionX == Int.MIN_VALUE) {
+            val dp = ctx.resources.displayMetrics.density
+            (ctx.resources.displayMetrics.widthPixels / 2 - 140 * dp).toInt()
+        } else {
+            prefs.overlayPositionX
         }
-        try {
-            card.alpha = prefs.overlayOpacity
-            wm.addView(card, params)
-            view = card
-            if (prefs.overlayAlert) beepAndVibrate(context)
-            Log.d("DriveWin", "overlay shown fare=${d.fare} km=${d.km} min=${d.minutes} verdict=${r.verdict}")
-            scheduleHide(context, card, prefs.overlayShowSeconds * 1000L)
-        } catch (e: Exception) {
-            Log.w("DriveWin", "overlay fail: ${e.message}")
-        }
+        p.y = prefs.overlayPositionY
+        return p
     }
 
     private fun beepAndVibrate(context: Context) {
@@ -89,103 +178,124 @@ object OverlayManager {
         }
     }
 
-    fun hide(context: Context) {
-        val v = view ?: return
-        hideRunnable?.let { Handler(Looper.getMainLooper()).removeCallbacks(it) }
-        hideRunnable = null
-        val wm = context.getSystemService(Context.WINDOW_SERVICE) as? WindowManager ?: return
-        try {
-            wm.removeView(v)
-        } catch (_: Exception) {
-        }
-        view = null
-    }
+    @Composable
+    fun OverlayCard() {
+        val c = content ?: return
+        val isExpanded = expanded
+        val context = LocalContext.current
+        val density = LocalDensity.current
+        val prefs = remember { Prefs(context) }
+        val fontScale = remember { prefs.overlayFontSize / 13f }
 
-    private fun scheduleHide(context: Context, card: View, delayMs: Long) {
-        val h = Handler(Looper.getMainLooper())
-        val runnable = Runnable {
-            if (view === card) hide(context)
-        }
-        hideRunnable = runnable
-        h.postDelayed(runnable, delayMs)
-    }
+        var drag by remember { mutableStateOf(IntOffset.Zero) }
 
-    private fun themeFor(packageName: String?, texts: List<String>?): Theme {
-        val pkg = packageName?.lowercase()
-        if (pkg?.contains("br.com.taxiapp") == true) return Theme.NINETY_NINE
-        if (pkg?.contains("com.ubercab") == true) return Theme.UBER
-
-        val joined = (texts?.joinToString(" ") ?: "").lowercase()
-        if (joined.contains("radar de viagens") || joined.contains("taxiapp")) return Theme.NINETY_NINE
-        if (joined.contains("uberx") || joined.contains("uber black") || joined.contains("uber comfort") || joined.contains("uber")) return Theme.UBER
-        return Theme.DEFAULT
-    }
-
-    private fun buildCard(context: Context, theme: Theme, prefs: Prefs, d: RideData, r: CalcResult): View {
-        val dp = context.resources.displayMetrics.density
-        val font = prefs.overlayFontSize / 14f
-
-        val bg = when (theme) {
-            Theme.NINETY_NINE -> 0xFF000000.toInt()
-            Theme.UBER -> 0xFFFFFFFF.toInt()
-            Theme.DEFAULT -> 0xFF17181C.toInt()
-        }
-        val fareColor = when (theme) {
-            Theme.NINETY_NINE -> 0xFFFFCC00.toInt()
-            Theme.UBER -> 0xFF000000.toInt()
-            Theme.DEFAULT -> 0xFFFFFFFF.toInt()
-        }
-        val lineColor = when (theme) {
-            Theme.NINETY_NINE -> 0xFFCCCCCC.toInt()
-            Theme.UBER -> 0xFF666666.toInt()
-            Theme.DEFAULT -> 0xFFCCCCCC.toInt()
+        val levelColor = when (c.result.level) {
+            Level.EXCELLENT, Level.GOOD -> Color(0xFF31F900)
+            Level.MEDIUM -> Color(0xFFF5A623)
+            Level.BAD -> Color(0xFFFF4D4D)
         }
 
-        val container = LinearLayout(context).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding((14 * dp).toInt(), (8 * dp).toInt(), (14 * dp).toInt(), (10 * dp).toInt())
-            gravity = Gravity.CENTER
-            background = GradientDrawable().apply {
-                cornerRadius = 14 * dp
-                setColor(bg)
-                setStroke((2 * dp).toInt(), verdictColor(r.verdict))
+        Box(
+            modifier = Modifier
+                .alpha(prefs.overlayOpacity)
+                .offset { drag }
+                .pointerInput(Unit) {
+                    detectDragGestures(
+                        onDrag = { change, amount ->
+                            change.consume()
+                            drag = IntOffset(
+                                drag.x + amount.x.roundToInt(),
+                                drag.y + amount.y.roundToInt()
+                            )
+                        },
+                        onDragEnd = {
+                            OverlayManager.moveBy(drag.x, drag.y)
+                            drag = IntOffset.Zero
+                        }
+                    )
+                }
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null
+                ) { OverlayManager.toggleExpanded() }
+                .background(Color(0xFF0E0F12), RoundedCornerShape(14.dp))
+                .border(2.dp, levelColor, RoundedCornerShape(14.dp))
+                .padding(horizontal = 14.dp, vertical = 10.dp)
+                .animateContentSize()
+        ) {
+            Column(
+                modifier = Modifier.width(((if (isExpanded) 250 else 220) * fontScale).dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    Text(
+                        "DRIVEWIN",
+                        color = Color(0xFFC864AF),
+                        fontSize = (11 * fontScale).sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        c.result.level.label,
+                        color = Color(0xFF0E0F12),
+                        fontSize = (10 * fontScale).sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier
+                            .background(levelColor, RoundedCornerShape(6.dp))
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    )
+                }
+
+                Spacer(Modifier.height(6.dp))
+
+                Text(
+                    "${ParsingUtils.formatMoney(c.result.perKm)}/km",
+                    color = Color.White,
+                    fontSize = (20 * fontScale).sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    "${ParsingUtils.formatMoney(c.result.perHour)}/h",
+                    color = Color(0xFFC8C8C8),
+                    fontSize = (14 * fontScale).sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    "NOTA ${c.result.score}/100",
+                    color = levelColor,
+                    fontSize = (12 * fontScale).sp,
+                    fontWeight = FontWeight.Bold
+                )
+
+                if (isExpanded) {
+                    Spacer(Modifier.height(8.dp))
+                    InfoRow("Valor", ParsingUtils.formatMoney(c.data.fare), fontScale, Color.White)
+                    InfoRow("Distancia", ParsingUtils.formatKm(c.result.totalKm), fontScale, Color(0xFFC8C8C8))
+                    InfoRow("Tempo", ParsingUtils.formatMin(c.result.totalMin), fontScale, Color(0xFFC8C8C8))
+                    if (c.suspicious) {
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            "Dados suspeitos",
+                            color = Color(0xFFFF4D4D),
+                            fontSize = (10 * fontScale).sp
+                        )
+                    }
+                }
             }
         }
-
-        fun text(s: String, sp: Float, bold: Boolean, color: Int, alpha: Float = 1f): TextView =
-            TextView(context).apply {
-                this.text = s
-                textSize = sp * font
-                setTextColor(color)
-                this.alpha = alpha
-                typeface = if (bold) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
-                gravity = Gravity.CENTER
-            }
-
-        val tripInfo = buildString {
-            if (d.minutes > 0) append(formatTime(d.minutes))
-            if (d.minutes > 0 && d.km > 0) append(" - ")
-            if (d.km > 0) append(formatKm(d.km))
-        }
-
-        container.addView(text("DriveWin - ${verdictLabel(r.verdict)}", 11f, true, verdictColor(r.verdict)))
-        container.addView(text(formatMoney(d.fare), 24f, true, fareColor))
-        if (tripInfo.isNotEmpty()) container.addView(text(tripInfo, 12f, false, lineColor, 0.95f))
-        val stats = buildString {
-            if (d.km > 0 && prefs.showPerKm) append("R\$/km ${formatMoney(r.perKm)}")
-            if (d.km > 0 && prefs.showPerKm && d.minutes > 0 && prefs.showPerHour) append(" - ")
-            if (d.minutes > 0 && prefs.showPerHour) append("R\$/h ${formatMoney(r.perHour)}")
-        }
-        container.addView(text(stats, 14f, false, lineColor, 0.97f))
-        return container
     }
 
-    fun formatKm(v: Double): String = String.format(Locale("pt", "BR"), "%.1f km", v)
-
-    fun formatTime(minutes: Double): String {
-        val m = minutes.toInt()
-        val h = m / 60
-        val rest = m % 60
-        return if (h > 0) "${h}h${rest}min" else "${m}min"
+    @Composable
+    private fun InfoRow(label: String, value: String, fontScale: Float, color: Color) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(label, color = Color(0xFF888888), fontSize = (11 * fontScale).sp)
+            Text(value, color = color, fontSize = (12 * fontScale).sp, fontWeight = FontWeight.Medium)
+        }
     }
 }

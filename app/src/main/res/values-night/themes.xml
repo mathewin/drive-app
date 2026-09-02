@@ -1,7 +1,8 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
-    <!-- Base application theme. -->
-    <style name="Base.Theme.MyApplication" parent="Theme.Material3.DayNight.NoActionBar">
-        <!-- Customize your dark theme here. -->
-        <!-- <item name="colorPrimary">@color/my_dark_primary</item> -->
+    <style name="Theme.MyApplication" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/fundo_escuro</item>
+        <item name="android:statusBarColor">@color/fundo_escuro</item>
+        <item name="android:navigationBarColor">@color/fundo_escuro</item>
+        <item name="android:colorAccent">@color/rosa_lilas</item>
     </style>
 </resources>

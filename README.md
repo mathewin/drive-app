@@ -1,38 +1,63 @@
-# DriveWin
+# DriveWin Calculadora de Ganhos
 
-App Android nativo que le a oferta da Uber, 99, inDriver e Bolt via acessibilidade e mostra em tempo real, num card flutuante colorido, quanto a corrida paga por km e por hora em relacao as metas do motorista.
+App Android nativo (Kotlin + Jetpack Compose) que le **automaticamente** as ofertas de corrida da **Uber** e **99** via acessibilidade e mostra, em um card flutuante arrastavel, a analise financeira instantanea: R\$/km, R\$/hora, classificacao e nota de 0 a 100 contra as metas do motorista.
 
-## Como preparar para o teste de rua
+O app faz **somente uma coisa**: oferta na tela -> detecta -> le -> valida -> calcula -> mostra o card. Sem ranking, sem historico complexo, sem gamificacao, sem rede social.
 
-1. Abra o projeto no Android Studio (pasta `app` -> botao Run / Build APK).
-2. Instale no celular e abra o DriveWin.
-3. Na aba **Leitura**, toque em cada botao `Conceder` e confirme:
-   - **Acessibilidade** -> ative o "DriveWin - Calculadora de ganhos"
-   - **Sobreposicao** -> permitir exibir sobre outros apps
-   - **Otimizacao de bateria** -> isentar (essencial no Xiaomi/MIUI, senao o servico e morto no meio do dia)
-4. No Xiaomi/MIUI, libere tambem o **autostart** do DriveWin: app Seguranca -> Definicoes -> Apps -> Iniciar automaticamente -> ligar DriveWin.
-5. O status deve ficar "AGUARDANDO CORRIDA".
-6. Na aba **Calculo**, ajuste as metas de R\$/km e R\$/h, posicao, opacidade, fonte, tempo de exibicao e o alerta sonoro/vibracao.
-7. Abra a Uber ou a 99 e aguarde uma oferta. O card aparece sozinho no topo (ou posicao escolhida), bipa e vibra.
+## Fluxo
 
-## Depurando na rua
+```
+IDLE -> DETECTING -> READING -> VALIDATING -> CALCULATING -> DISPLAYING -> aguarda nova oferta
+```
 
-Com o celular no modo desenvolvedor via USB:
+- Detecta apenas os pacotes `com.ubercab` e `br.com.taxiapp`.
+- Eventos: `TYPE_WINDOW_STATE_CHANGED`, `TYPE_WINDOW_CONTENT_CHANGED`, `TYPE_VIEW_TEXT_CHANGED`.
+- Debounce de 150 ms, hash anti-duplicacao (app + valor + distancia + tempo) evita recalcular a mesma oferta.
+- Duas leituras com pequeno intervalo confirmam os dados; leituras divergentes sao relidas.
+- Parsers separados: `UberParser` e `NinetyNineParser`.
+- Fallback via **ML Kit OCR** (com captura de tela autorizada) apenas quando a leitura direta falhar; nunca roda continuamente.
+
+## Calculos
+
+- Distancia operacional = ate o passageiro + viagem (ou distancia total disponivel).
+- Tempo total = ate o passageiro + viagem (ou tempo total disponivel).
+- `R$/km = valor / distancia total`; `R$/hora = valor / tempo total * 60`.
+
+## Classificacao e nota
+
+- Excelente: ambas as metas superadas com margem >= 50%.
+- Boa: ambas as metas atingidas.
+- Media: apenas uma meta atingida.
+- Ruim: nenhuma meta atingida.
+- Nota 0-100: 50% desempenho R\$/km + 50% R\$/h, comparado com as metas, limite 100.
+
+## Preparo para teste de rua
+
+1. Abra no Android Studio (Run / Build APK) e instale.
+2. Aba **Leitura**: conceda Acessibilidade, Sobreposicao e isente a Bateria (essencial no Xiaomi/MIUI).
+3. No Xiaomi/MIUI libere tambem o **autostart** do DriveWin (Seguranca -> Apps -> Iniciar automaticamente).
+4. Toque em **INICIAR MONITORAMENTO** (ativa o servico em primeiro plano com notificacao).
+5. Aba **Metas**: ajuste metas de R\$/km e R\$/h, aparencia do card e ative o OCR (autorizando a captura de tela) se quiser o fallback.
+6. Abra a Uber ou a 99 e aguarde uma oferta. O card aparece sozinho, com bip e vibracao.
+
+O card compacto mostra `DRIVEWIN`, classificacao colorida, R\$/km, R\$/h e nota. Toque para expandir (valor, distancia, tempo), arraste para mover (a posicao e lembrada).
+
+## Depuracao na rua
 
 ```
 adb logcat -s DriveWin
 ```
 
-A tag `DriveWin` mostra:
-- `service connected` -> servico de acessibilidade ativo
-- `overlay shown fare=... km=... min=... verdict=...` -> card exibido
-- `oferta detectada mas sem card` -> viu a oferta mas nao achou o card
-- `parse falhou textos=...` -> o card nao foi lido; mande esse texto para ajustar o parser
+Mostra `service connected`, `offer ... rkm=... rh=... nota=...`, `direct read falhou, tentando OCR`, `ocr ok ...` e `ocr fail`.
 
 ## Estrutura
 
-- `CalculatorService.kt` - servico de acessibilidade
-- `RideCardParser.kt` - le valor, km e tempo do card
-- `OverlayManager.kt` - card flutuante com tema por app (99 = preto/amarelo, Uber = branco/preto)
-- `CalculoFragment.kt` - metas e aparencia do card
-- `RideHistory.kt` / `HistoricoFragment.kt` / `DesempenhoFragment.kt` - historico e medias do dia
+- `CalculatorService.kt` - servico de acessibilidade com maquina de estados
+- `UberParser.kt` / `NinetyNineParser.kt` - parsers separados por app
+- `ParsingUtils.kt` - normalizacao de dinheiro, km e tempo
+- `Calculator.kt` - R\$/km, R\$/h, classificacao e nota
+- `Validator.kt` - coerencia e valores suspeitos
+- `OverlayManager.kt` - card flutuante Compose (arrastavel, minimizavel, lembra posicao)
+- `OcrFallback.kt` - fallback ML Kit com MediaProjection
+- `RideForegroundService.kt` - servico em primeiro plano
+- `MainActivity.kt` + `ui/` - interface escura (verde #31F900, rosa #C864AF)

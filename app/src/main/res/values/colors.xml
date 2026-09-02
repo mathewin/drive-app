@@ -2,4 +2,5 @@
 <resources>
     <color name="verde_neon">#31F900</color>
     <color name="rosa_lilas">#C864AF</color>
+    <color name="fundo_escuro">#0B0C0E</color>
 </resources>
