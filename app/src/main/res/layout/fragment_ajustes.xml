@@ -13,39 +13,9 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="AJUSTES"
+            android:textColor="@color/verde_neon"
             android:textSize="20sp"
             android:textStyle="bold" />
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="24dp"
-            android:text="Metas do card flutuante"
-            android:textSize="16sp"
-            android:textStyle="bold" />
-
-        <EditText
-            android:id="@+id/etMetaKmAj"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:hint="Meta minima R\$/km (ex: 1,50)"
-            android:inputType="numberDecimal" />
-
-        <EditText
-            android:id="@+id/etMetaHAj"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:hint="Meta minima R\$/h (ex: 25)"
-            android:inputType="numberDecimal" />
-
-        <Button
-            android:id="@+id/btnSalvarAj"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:text="Salvar metas" />
 
         <TextView
             android:layout_width="wrap_content"

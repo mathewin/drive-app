@@ -18,8 +18,6 @@ object OverlayManager {
 
     private enum class Theme { NINETY_NINE, UBER, DEFAULT }
 
-    private const val HIDE_DELAY_MS = 7000L
-
     private var view: View? = null
     private var hideRunnable: Runnable? = null
 
@@ -42,7 +40,8 @@ object OverlayManager {
     fun show(context: Context, packageName: String?, texts: List<String>?, d: RideData, r: CalcResult) {
         val wm = context.getSystemService(Context.WINDOW_SERVICE) as? WindowManager ?: return
         hide(context)
-        val card = buildCard(context, themeFor(packageName, texts), d, r)
+        val prefs = Prefs(context)
+        val card = buildCard(context, themeFor(packageName, texts), prefs, d, r)
         val params = WindowManager.LayoutParams(
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.WRAP_CONTENT,
@@ -50,12 +49,18 @@ object OverlayManager {
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE,
             PixelFormat.TRANSLUCENT
         )
-        params.gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
-        params.y = (context.resources.displayMetrics.density * 40).toInt()
+        val margin = (context.resources.displayMetrics.density * 40).toInt()
+        params.y = margin
+        params.gravity = when (prefs.overlayPosition) {
+            "baixo" -> Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
+            "meio" -> Gravity.CENTER
+            else -> Gravity.TOP or Gravity.CENTER_HORIZONTAL
+        }
         try {
+            card.alpha = prefs.overlayOpacity
             wm.addView(card, params)
             view = card
-            scheduleHide(context, card)
+            scheduleHide(context, card, prefs.overlayShowSeconds * 1000L)
         } catch (_: Exception) {
         }
     }
@@ -72,13 +77,13 @@ object OverlayManager {
         view = null
     }
 
-    private fun scheduleHide(context: Context, card: View) {
+    private fun scheduleHide(context: Context, card: View, delayMs: Long) {
         val h = Handler(Looper.getMainLooper())
         val runnable = Runnable {
             if (view === card) hide(context)
         }
         hideRunnable = runnable
-        h.postDelayed(runnable, HIDE_DELAY_MS)
+        h.postDelayed(runnable, delayMs)
     }
 
     private fun themeFor(packageName: String?, texts: List<String>?): Theme {
@@ -92,8 +97,9 @@ object OverlayManager {
         return Theme.DEFAULT
     }
 
-    private fun buildCard(context: Context, theme: Theme, d: RideData, r: CalcResult): View {
+    private fun buildCard(context: Context, theme: Theme, prefs: Prefs, d: RideData, r: CalcResult): View {
         val dp = context.resources.displayMetrics.density
+        val font = prefs.overlayFontSize / 14f
 
         val bg = when (theme) {
             Theme.NINETY_NINE -> 0xFF000000.toInt()
@@ -125,7 +131,7 @@ object OverlayManager {
         fun text(s: String, sp: Float, bold: Boolean, color: Int, alpha: Float = 1f): TextView =
             TextView(context).apply {
                 this.text = s
-                textSize = sp
+                textSize = sp * font
                 setTextColor(color)
                 this.alpha = alpha
                 typeface = if (bold) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
@@ -142,9 +148,9 @@ object OverlayManager {
         container.addView(text(formatMoney(d.fare), 24f, true, fareColor))
         if (tripInfo.isNotEmpty()) container.addView(text(tripInfo, 12f, false, lineColor, 0.95f))
         val stats = buildString {
-            if (d.km > 0) append("R\$/km ${formatMoney(r.perKm)}")
-            if (d.km > 0 && d.minutes > 0) append(" - ")
-            if (d.minutes > 0) append("R\$/h ${formatMoney(r.perHour)}")
+            if (d.km > 0 && prefs.showPerKm) append("R\$/km ${formatMoney(r.perKm)}")
+            if (d.km > 0 && prefs.showPerKm && d.minutes > 0 && prefs.showPerHour) append(" - ")
+            if (d.minutes > 0 && prefs.showPerHour) append("R\$/h ${formatMoney(r.perHour)}")
         }
         container.addView(text(stats, 14f, false, lineColor, 0.97f))
         return container

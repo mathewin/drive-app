@@ -1,0 +1,182 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="16dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="CALCULO DE GANHOS"
+            android:textColor="@color/verde_neon"
+            android:textSize="20sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="Metas de corrida"
+            android:textColor="@color/rosa_lilas"
+            android:textSize="14sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:text="Ganho por km"
+            android:textSize="13sp" />
+
+        <SeekBar
+            android:id="@+id/sbPerKm"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content" />
+
+        <TextView
+            android:id="@+id/tvValPerKm"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="R$ 1,50/km"
+            android:textColor="@color/verde_neon"
+            android:textSize="16sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:text="Ganho por hora"
+            android:textSize="13sp" />
+
+        <SeekBar
+            android:id="@+id/sbPerH"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content" />
+
+        <TextView
+            android:id="@+id/tvValPerH"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="R$ 40,00/h"
+            android:textColor="@color/verde_neon"
+            android:textSize="16sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:text="Aparencia do cartao"
+            android:textColor="@color/rosa_lilas"
+            android:textSize="14sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:text="Posicao"
+            android:textSize="13sp" />
+
+        <Spinner
+            android:id="@+id/spPosicao"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:text="Opacidade"
+            android:textSize="13sp" />
+
+        <SeekBar
+            android:id="@+id/sbOpac"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content" />
+
+        <TextView
+            android:id="@+id/tvValOpac"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="100%"
+            android:textColor="@color/verde_neon"
+            android:textSize="14sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:text="Tamanho da fonte"
+            android:textSize="13sp" />
+
+        <SeekBar
+            android:id="@+id/sbFont"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content" />
+
+        <TextView
+            android:id="@+id/tvValFont"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="14"
+            android:textColor="@color/verde_neon"
+            android:textSize="14sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:text="Tempo de exibicao"
+            android:textSize="13sp" />
+
+        <SeekBar
+            android:id="@+id/sbSecs"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content" />
+
+        <TextView
+            android:id="@+id/tvValSecs"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="8 segundos"
+            android:textColor="@color/verde_neon"
+            android:textSize="14sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:text="Metricas do cartao"
+            android:textSize="13sp" />
+
+        <CheckBox
+            android:id="@+id/cbPerKm"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Mostrar R\$/km" />
+
+        <CheckBox
+            android:id="@+id/cbPerH"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Mostrar R\$/h" />
+
+        <Button
+            android:id="@+id/btnTestarCardCalc"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:text="TESTAR CARD" />
+
+    </LinearLayout>
+</ScrollView>

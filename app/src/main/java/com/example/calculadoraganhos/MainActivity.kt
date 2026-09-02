@@ -22,6 +22,10 @@ class MainActivity : AppCompatActivity() {
                     replace(DesempenhoFragment())
                     true
                 }
+                R.id.nav_calculo -> {
+                    replace(CalculoFragment())
+                    true
+                }
                 R.id.nav_historico -> {
                     replace(HistoricoFragment())
                     true
