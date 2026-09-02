@@ -56,6 +56,8 @@ fun DriveWinApp(
     openOverlay: () -> Unit,
     openBattery: () -> Unit,
     startMonitor: () -> Unit,
+    stopMonitor: () -> Unit,
+    testOverlay: () -> Unit,
     requestCapture: () -> Unit
 ) {
     var tab by remember { mutableIntStateOf(0) }
@@ -82,7 +84,7 @@ fun DriveWinApp(
         when (tab) {
             0 -> LeituraScreen(
                 Modifier.padding(padding),
-                openA11y, openOverlay, openBattery, startMonitor
+                openA11y, openOverlay, openBattery, startMonitor, stopMonitor, testOverlay
             )
             else -> MetasScreen(Modifier.padding(padding), requestCapture)
         }
@@ -95,7 +97,9 @@ private fun LeituraScreen(
     openA11y: () -> Unit,
     openOverlay: () -> Unit,
     openBattery: () -> Unit,
-    startMonitor: () -> Unit
+    startMonitor: () -> Unit,
+    stopMonitor: () -> Unit,
+    testOverlay: () -> Unit
 ) {
     val ctx = LocalContext.current
     var tick by remember { mutableIntStateOf(0) }
@@ -108,9 +112,11 @@ private fun LeituraScreen(
     val a11y = remember(tick) { a11yActive(ctx) }
     val overlay = remember(tick) { Settings.canDrawOverlays(ctx) }
     val battery = remember(tick) { batteryIgnored(ctx) }
+    val monitorFlag = remember(tick) { Prefs(ctx).monitorOn }
     val serviceState = AppState.serviceState
     val lastOffer = remember(tick) { Prefs(ctx).lastOffer }
     val ocrAvail = remember(tick) { OcrFallback.available() }
+    val on = monitorFlag && a11y && overlay
 
     Column(
         modifier = modifier
@@ -125,7 +131,16 @@ private fun LeituraScreen(
         )
 
         Spacer(Modifier.height(20.dp))
-        StatusCard(a11y, overlay, serviceState)
+        StatusCard(on = on, a11y = a11y, overlay = overlay, serviceState = serviceState)
+
+        Spacer(Modifier.height(24.dp))
+        SectionTitle("LIGA / DESLIGA")
+        Spacer(Modifier.height(8.dp))
+        MonitorToggle(
+            on = on,
+            pending = monitorFlag && !(a11y && overlay),
+            onChecked = { if (it) startMonitor() else stopMonitor() }
+        )
 
         Spacer(Modifier.height(24.dp))
         SectionTitle("PERMISSOES")
@@ -136,14 +151,14 @@ private fun LeituraScreen(
 
         Spacer(Modifier.height(16.dp))
         Button(
-            onClick = startMonitor,
+            onClick = testOverlay,
             modifier = Modifier.fillMaxWidth(),
             colors = ButtonDefaults.buttonColors(
-                containerColor = VerdeNeon,
-                contentColor = Color(0xFF000000)
+                containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                contentColor = Color(0xFFE8E8E8)
             )
         ) {
-            Text("INICIAR MONITORAMENTO", fontWeight = FontWeight.Bold)
+            Text("TESTAR CARD", fontWeight = FontWeight.Bold)
         }
 
         Spacer(Modifier.height(24.dp))
@@ -173,9 +188,56 @@ private fun LeituraScreen(
 }
 
 @Composable
-private fun StatusCard(a11y: Boolean, overlay: Boolean, serviceState: String) {
+private fun MonitorToggle(on: Boolean, pending: Boolean, onChecked: (Boolean) -> Unit) {
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(12.dp))
+            .padding(14.dp)
+    ) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    "Monitor de corridas",
+                    color = Color(0xFFE8E8E8),
+                    fontSize = 15.sp,
+                    modifier = Modifier.weight(1f)
+                )
+                Text(
+                    if (on) "LIGADO" else if (pending) "PENDENTE" else "DESLIGADO",
+                    color = when {
+                        on -> VerdeNeon
+                        pending -> Color(0xFFF5A623)
+                        else -> Color(0xFF8A8A8A)
+                    },
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(end = 10.dp)
+                )
+                Switch(checked = on, onCheckedChange = onChecked)
+            }
+            Spacer(Modifier.height(6.dp))
+            Text(
+                when {
+                    on -> "Ligado - le as ofertas da Uber e da 99 e mostra o card"
+                    pending -> "Ligue a Acessibilidade e a Sobreposicao para ativar"
+                    else -> "Desligado - o app nao le ofertas"
+                },
+                color = Color(0xFF8A8A8A),
+                fontSize = 12.sp
+            )
+        }
+    }
+}
+
+@Composable
+private fun StatusCard(on: Boolean, a11y: Boolean, overlay: Boolean, serviceState: String) {
     val ready = a11y && overlay
-    val color = if (ready) VerdeNeon else Color(0xFFF5A623)
+    val (title, color) = when {
+        on -> "MONITORANDO" to VerdeNeon
+        ready -> "DESLIGADO" to Color(0xFF8A8A8A)
+        else -> "CONFIGURE AS PERMISSOES" to Color(0xFFF5A623)
+    }
     Box(
         Modifier
             .fillMaxWidth()
@@ -184,18 +246,19 @@ private fun StatusCard(a11y: Boolean, overlay: Boolean, serviceState: String) {
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
             Text(
-                if (ready) "MONITORANDO" else "CONFIGURE AS PERMISSOES",
+                title,
                 color = color, fontSize = 18.sp, fontWeight = FontWeight.Bold
             )
             Spacer(Modifier.height(4.dp))
             Text(
-                "Estado: $serviceState",
+                if (on) "Estado: $serviceState" else "Estado: ---",
                 color = Color(0xFF8A8A8A), fontSize = 11.sp
             )
             Spacer(Modifier.height(4.dp))
             Text(
-                if (ready) "O card aparece sozinho em cada oferta"
-                else "Conceda as permissoes abaixo para comecar",
+                if (on) "O card aparece sozinho em cada oferta"
+                else if (!ready) "Conceda as permissoes abaixo para comecar"
+                else "Use o LIGA/DESLIGA acima para ativar",
                 color = Color(0xFF8A8A8A), fontSize = 11.sp
             )
         }

@@ -76,7 +76,9 @@ class MainActivity : ComponentActivity() {
                             }
                         }
                     },
-                    startMonitor = { startMonitor() },
+                    startMonitor = { toggleMonitor(true) },
+                    stopMonitor = { toggleMonitor(false) },
+                    testOverlay = { testOverlay() },
                     requestCapture = { requestCapture() }
                 )
             }
@@ -88,25 +90,57 @@ class MainActivity : ComponentActivity() {
         super.onDestroy()
     }
 
-    private fun startMonitor() {
-        val a11y = settingsServiceActive()
-        val overlay = Settings.canDrawOverlays(this)
-        when {
-            !a11y && !overlay -> toast("Ative a acessibilidade e a sobreposicao")
-            !a11y -> toast("Ative a acessibilidade")
-            !overlay -> toast("Permita a sobreposicao")
-            else -> {
-                toast("Monitoramento ativo - abra a Uber ou a 99")
-                if (Build.VERSION.SDK_INT >= 33 &&
-                    ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
-                    != PackageManager.PERMISSION_GRANTED
-                ) {
-                    notifPermLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                } else {
-                    RideForegroundService.start(this)
-                }
+    private fun toggleMonitor(on: Boolean) {
+        if (on) {
+            val a11y = settingsServiceActive()
+            val overlay = Settings.canDrawOverlays(this)
+            if (!a11y) {
+                toast("Abra a Acessibilidade e ligue o DriveWin")
+                startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                return
             }
+            if (!overlay) {
+                toast("Permita a sobreposicao do DriveWin")
+                startActivity(
+                    Intent(
+                        Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                        Uri.parse("package:$packageName")
+                    )
+                )
+                return
+            }
+            Prefs(this).monitorOn = true
+            toast("Monitoramento LIGADO - abra a Uber ou a 99")
+            if (Build.VERSION.SDK_INT >= 33 &&
+                ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
+                != PackageManager.PERMISSION_GRANTED
+            ) {
+                notifPermLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            } else {
+                RideForegroundService.start(this)
+            }
+        } else {
+            Prefs(this).monitorOn = false
+            RideForegroundService.stop(this)
+            OverlayManager.hide()
+            toast("Monitoramento DESLIGADO")
         }
+    }
+
+    private fun testOverlay() {
+        if (!Settings.canDrawOverlays(this)) {
+            toast("Permita a sobreposicao primeiro")
+            return
+        }
+        val prefs = Prefs(this)
+        val data = RideData(fare = 25.0, totalKm = 8.0, totalMin = 20.0)
+        val res = Calculator.calculate(data, prefs.minPerKm, prefs.minPerHour)
+        OverlayManager.show(
+            this,
+            OverlayManager.OverlayContent(data, res, "TESTE", false, 1.0),
+            beep = prefs.overlayAlert
+        )
+        toast("Card de teste exibido por ${prefs.overlayShowSeconds}s")
     }
 
     private fun requestCapture() {

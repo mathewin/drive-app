@@ -21,14 +21,20 @@ class CalculatorService : AccessibilityService() {
         super.onServiceConnected()
         Log.d(TAG, "service connected")
         setState(State.IDLE)
-        try {
-            RideForegroundService.start(this)
-        } catch (e: Exception) {
-            Log.w(TAG, "fgs start: ${e.message}")
+        if (Prefs(this).monitorOn) {
+            try {
+                RideForegroundService.start(this)
+            } catch (e: Exception) {
+                Log.w(TAG, "fgs start: ${e.message}")
+            }
         }
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
+        if (!Prefs(this).monitorOn) {
+            if (state == State.DISPLAYING) OverlayManager.hide()
+            return
+        }
         val root = rootInActiveWindow ?: return
         val pkg = root.packageName?.toString()?.lowercase() ?: return
         val isUber = pkg.contains("com.ubercab")

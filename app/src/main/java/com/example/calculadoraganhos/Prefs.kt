@@ -49,6 +49,10 @@ class Prefs(context: Context) {
         get() = sp.getBoolean("ov_alert", true)
         set(v) = sp.edit().putBoolean("ov_alert", v).apply()
 
+    var monitorOn: Boolean
+        get() = sp.getBoolean("monitor_on", false)
+        set(v) = sp.edit().putBoolean("monitor_on", v).apply()
+
     var ocrEnabled: Boolean
         get() = sp.getBoolean("ocr_enabled", false)
         set(v) = sp.edit().putBoolean("ocr_enabled", v).apply()
