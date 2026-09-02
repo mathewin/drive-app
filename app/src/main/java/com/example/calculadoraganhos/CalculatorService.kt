@@ -18,6 +18,7 @@ class CalculatorService : AccessibilityService() {
     private var ocrAttempted = false
     private var lastCtxTag = ""
     private var lastCtxMs = 0L
+    private var lastDumpMs = 0L
 
     private fun logCtx(pkg: String, isUber: Boolean, msg: String) {
         val now = System.currentTimeMillis()
@@ -26,6 +27,18 @@ class CalculatorService : AccessibilityService() {
             lastCtxTag = tag
             lastCtxMs = now
             DriveWinLog.log("calc", msg)
+        }
+    }
+
+    private fun dumpTexts(source: String, items: List<TextItem>) {
+        val now = System.currentTimeMillis()
+        if (now - lastDumpMs < 4000) return
+        lastDumpMs = now
+        DriveWinLog.log("calc", "--- textos vistos ($source):")
+        items.take(14).forEach {
+            val vid = it.viewId?.substringAfterLast('/') ?: ""
+            val txt = it.text.replace("\n", " ").take(70)
+            DriveWinLog.log("calc", "  [$txt]${if (vid.isNotEmpty()) " <$vid>" else ""}")
         }
     }
 
@@ -83,14 +96,16 @@ class CalculatorService : AccessibilityService() {
         val card = parser.parse(items)
         if (card == null) {
             DriveWinLog.log("calc", "parse direto falhou (textos: ${texts.size})")
+            dumpTexts("a11y", items)
             if (!ocrAttempted) {
                 ocrAttempted = true
                 DriveWinLog.log("calc", "tentando OCR (se autorizado)")
                 OcrFallback.tryCaptureAndParse(
                     this,
                     parser = { parser.parse(it) }
-                ) { ocrCard, _ ->
+                ) { ocrCard, ocrItems ->
                     DriveWinLog.log("calc", "OCR retornou card - validando")
+                    if (ocrItems.isNotEmpty()) dumpTexts("ocr", ocrItems)
                     handleCard(ocrCard, isUber, System.currentTimeMillis())
                 }
             }
