@@ -43,6 +43,7 @@ class CalculatorService : AccessibilityService() {
     private var scanThread: HandlerThread? = null
     private var scanHandler: Handler? = null
     private var scanPosted = false
+    private var offerAbsentSince = 0L
 
     private fun logCtx(pkg: String, isUber: Boolean, msg: String) {
         val now = System.currentTimeMillis()
@@ -165,6 +166,33 @@ class CalculatorService : AccessibilityService() {
         }
     }
 
+    private fun noteOfferPresent() {
+        offerAbsentSince = 0L
+    }
+
+    private fun noteOfferAbsent() {
+        val now = System.currentTimeMillis()
+        val stale = shownCard != null || state != State.IDLE ||
+            scanSig.isNotEmpty() || lastTextSig.isNotEmpty() || lastHash != null
+        if (!stale) {
+            offerAbsentSince = 0L
+            return
+        }
+        if (offerAbsentSince == 0L) {
+            offerAbsentSince = now
+            return
+        }
+        if (now - offerAbsentSince < OFFER_ABSENT_CONFIRM_MS) return
+        offerAbsentSince = 0L
+        if (state == State.DISPLAYING || shownCard != null) {
+            OverlayManager.hide()
+            DriveWinLog.log("calc", "oferta saiu da tela - card escondido")
+        }
+        resetOfferState()
+        setState(State.IDLE)
+        DriveWinLog.log("calc", "travas de oferta liberadas - proxima chamada sera lida")
+    }
+
     private fun rideWindowPackageAndRoot(): Pair<String?, AccessibilityNodeInfo?> {
         try {
             for (w in windows) {
@@ -226,20 +254,28 @@ class CalculatorService : AccessibilityService() {
     }
 
     private fun treeDetectOffer(parser: CardParserBase, isUber: Boolean): Boolean {
-        val (_, root) = rideWindowPackageAndRoot() ?: return false
+        val (_, root) = rideWindowPackageAndRoot()
         if (root == null) return false
         val items = collect(root)
-        if (items.isEmpty()) return false
+        if (items.isEmpty()) {
+            noteOfferAbsent()
+            return false
+        }
         val texts = items.map { it.text }
         val hasMoney = ParsingUtils.moneyValues(texts).isNotEmpty()
         val hasKmOrMin = ParsingUtils.kmValues(texts).isNotEmpty() ||
             ParsingUtils.minutesValues(texts).isNotEmpty()
         if (!hasMoney && !hasKmOrMin) {
+            noteOfferAbsent()
             if (ParsingUtils.offerContext(texts)) {
                 lastOfferish = true
                 lastOfferishMs = System.currentTimeMillis()
             }
             return false
+        }
+        if (hasMoney && hasKmOrMin) {
+            noteOfferPresent()
+            lastOfferMs = System.currentTimeMillis()
         }
         val sig = buildString {
             (ParsingUtils.moneyValues(texts) + ParsingUtils.kmValues(texts) +
@@ -252,7 +288,6 @@ class CalculatorService : AccessibilityService() {
         scanSig = sig
         lastOfferish = true
         lastOfferishMs = System.currentTimeMillis()
-        if (hasMoney && hasKmOrMin) lastOfferMs = System.currentTimeMillis()
         val card = parser.parse(items)
         if (card != null) {
             DriveWinLog.log(
@@ -390,9 +425,9 @@ class CalculatorService : AccessibilityService() {
         val nowMs = if (now > 0L) now else System.currentTimeMillis()
         val disp = shownCard
         if (disp != null && similar(disp, card)) {
-            val lastShownAge = nowMs - lastShownMs
+            val cardStillUp = OverlayManager.isVisible() || (nowMs - lastShownMs < holdMs())
             val oldOfferStillOnScreen = nowMs - lastOfferMs < FRESH_OFFER_GAP_MS
-            if ((lastShownAge < holdMs() || lastShownAge < SIMILAR_LOCK_MS) && oldOfferStillOnScreen) {
+            if (cardStillUp && oldOfferStillOnScreen) {
                 if (disp.passenger == null && card.passenger != null) {
                     refreshPassenger(card)
                 } else {
@@ -522,6 +557,9 @@ class CalculatorService : AccessibilityService() {
         lastHash = null
         stableOcr = null
         stableOcrMs = 0L
+        scanSig = ""
+        lastTextSig = ""
+        offerAbsentSince = 0L
     }
 
     private fun refreshPassenger(card: ParsedCard) {
@@ -579,7 +617,7 @@ class CalculatorService : AccessibilityService() {
         private const val DEBOUNCE_MS = 100L
         private const val OCR_CONFIRM_MIN_MS = 400L
         private const val SCAN_INTERVAL_MS = 300L
-        private const val SIMILAR_LOCK_MS = 45000L
+        private const val OFFER_ABSENT_CONFIRM_MS = 700L
         private const val RIDE_WINDOW_MS = 600000L
         private const val OCR_FAST_MS = 600L
         private const val OCR_SLOW_MS = 900L

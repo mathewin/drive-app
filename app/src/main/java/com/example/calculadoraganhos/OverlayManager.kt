@@ -124,6 +124,8 @@ object OverlayManager {
         }
     }
 
+    fun isVisible(): Boolean = view != null
+
     private val overlayTouch = View.OnTouchListener { v, ev ->
         val p = params ?: return@OnTouchListener false
         when (ev.actionMasked) {
