@@ -43,6 +43,12 @@ class CalculatorService : AccessibilityService() {
     private var rideGoneSince = 0L
     private var lastOcrNudgeMs = 0L
     private var dismissedCard: ParsedCard? = null
+    private var lastMoneySeenMs = 0L
+    private var prevMoneySeen = false
+    private var ocrNudgeUntilMs = 0L
+    private var cardConfirmed = false
+    private var ocrConfirmAttempts = 0
+    private var ocrEmptyStreak = 0
 
     private fun dumpTexts(source: String, items: List<TextItem>) {
         val now = System.currentTimeMillis()
@@ -57,6 +63,28 @@ class CalculatorService : AccessibilityService() {
     }
 
     private var shotExecutor: Executor? = null
+
+    private fun postToScan(run: () -> Unit) {
+        val h = scanHandler
+        if (h != null) {
+            h.post(run)
+        } else {
+            ocrInFlight = false
+        }
+    }
+
+    private fun ocrEmptyResult() {
+        if (shownCard != null && !cardConfirmed) {
+            ocrEmptyStreak++
+            if (ocrEmptyStreak >= OCR_MAX_CONFIRM) {
+                cardConfirmed = true
+                ocrEmptyStreak = 0
+                DriveWinLog.log("calc", "sem leitura OCR consistente - mantendo card atual")
+            }
+        } else {
+            ocrEmptyStreak = 0
+        }
+    }
 
     private fun tryOcr(parser: CardParserBase, isUber: Boolean) {
         val now = System.currentTimeMillis()
@@ -86,43 +114,60 @@ class CalculatorService : AccessibilityService() {
                             hb.close()
                         }
                         if (bmp == null) {
-                            ocrInFlight = false
-                            DriveWinLog.log("calc", "screenshot vazio ou falha ao converter")
+                            postToScan {
+                                ocrInFlight = false
+                                DriveWinLog.log("calc", "screenshot vazio ou falha ao converter")
+                            }
                             return
                         }
                         val regionBmp = OcrFallback.cropBottomRegion(bmp)
                         if (regionBmp !== bmp) bmp.recycle()
                         OcrFallback.runOcrOnBitmap(regionBmp, { parser.parse(it) }) { card, items ->
-                            ocrInFlight = false
-                            if (items.isNotEmpty()) dumpTexts("ocr", items)
-                            if (card != null) {
-                                DriveWinLog.log("calc", "OCR retornou card - validando")
-                                handleCard(card.copy(confidence = 0.6), isUber, System.currentTimeMillis())
-                            } else if (lastOfferish) {
-                                lastOcrTryMs = System.currentTimeMillis() - 350L
-                            }
                             regionBmp.recycle()
+                            postToScan {
+                                ocrInFlight = false
+                                if (items.isNotEmpty()) dumpTexts("ocr", items)
+                                if (card != null) {
+                                    DriveWinLog.log("calc", "OCR retornou card - validando")
+                                    handleCard(card.copy(confidence = 0.6), isUber, System.currentTimeMillis())
+                                } else if (lastOfferish) {
+                                    lastOcrTryMs = System.currentTimeMillis() - 150L
+                                    ocrEmptyResult()
+                                } else {
+                                    ocrEmptyResult()
+                                }
+                            }
                         }
                     }
 
                     override fun onFailure(errorCode: Int) {
-                        ocrInFlight = false
-                        DriveWinLog.log("calc", "screenshot da acessibilidade falhou (codigo $errorCode)")
+                        postToScan {
+                            ocrInFlight = false
+                            DriveWinLog.log("calc", "screenshot da acessibilidade falhou (codigo $errorCode)")
+                        }
                     }
                 })
             } catch (e: Exception) {
-                ocrInFlight = false
-                DriveWinLog.log("calc", "erro no screenshot: ${e.message}")
+                postToScan {
+                    ocrInFlight = false
+                    DriveWinLog.log("calc", "erro no screenshot: ${e.message}")
+                }
             }
             return
         }
-        OcrFallback.tryCaptureAndParse(this, parser = { parser.parse(it) }) { ocrCard, ocrItems ->
-            ocrInFlight = false
-            DriveWinLog.log("calc", "OCR (media projection) retornou card - validando")
-            if (ocrItems.isNotEmpty()) dumpTexts("ocr", ocrItems)
-            handleCard(ocrCard, isUber, System.currentTimeMillis())
+        val started = OcrFallback.tryCaptureAndParse(this, parser = { parser.parse(it) }) { ocrCard, ocrItems ->
+            postToScan {
+                ocrInFlight = false
+                if (ocrItems.isNotEmpty()) dumpTexts("ocr", ocrItems)
+                if (ocrCard != null) {
+                    DriveWinLog.log("calc", "OCR (media projection) retornou card - validando")
+                    handleCard(ocrCard.copy(confidence = 0.6), isUber, System.currentTimeMillis())
+                } else {
+                    ocrEmptyResult()
+                }
+            }
         }
-        ocrInFlight = false
+        if (!started) ocrInFlight = false
     }
 
     private fun startScanner() {
@@ -264,10 +309,16 @@ class CalculatorService : AccessibilityService() {
         rideGoneSince = 0L
         val parser = if (lastScannerUber) UberParser else NinetyNineParser
         if (treeDetectOffer(parser, lastScannerUber)) return
-        val displayingTreeCard = state == State.DISPLAYING && scanSig.isNotEmpty()
+        val moneyActive = now - lastMoneySeenMs < OFFER_ACTIVE_MS
         ocrCooldownMs = when {
-            displayingTreeCard -> -1L
-            now - lastOfferishMs < OFFER_ACTIVE_MS -> OCR_FAST_MS
+            dismissedCard != null -> -1L
+            moneyActive || now < ocrNudgeUntilMs -> {
+                when {
+                    shownCard == null -> OCR_FAST_MS
+                    cardConfirmed -> -1L
+                    else -> OCR_UPDATE_MS
+                }
+            }
             else -> OCR_IDLE_MS
         }
         if (ocrCooldownMs > 0L) tryOcr(parser, lastScannerUber)
@@ -291,6 +342,15 @@ class CalculatorService : AccessibilityService() {
         val hasMoney = ParsingUtils.moneyValues(texts).isNotEmpty()
         val hasKmOrMin = ParsingUtils.kmValues(texts).isNotEmpty() ||
             ParsingUtils.minutesValues(texts).isNotEmpty()
+        if (hasMoney) {
+            lastMoneySeenMs = System.currentTimeMillis()
+            if (!prevMoneySeen && shownCard == null && !ocrInFlight) {
+                lastOcrTryMs = 0L
+            }
+            prevMoneySeen = true
+        } else if (prevMoneySeen) {
+            prevMoneySeen = false
+        }
         if (!hasMoney && !hasKmOrMin) {
             noteOfferAbsent()
             if (ParsingUtils.offerContext(texts)) {
@@ -365,11 +425,11 @@ class CalculatorService : AccessibilityService() {
             val contentChanged = t == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED ||
                 t == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED ||
                 t == AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED
-            val displayingTreeCard = state == State.DISPLAYING && scanSig.isNotEmpty()
-            if (contentChanged && !displayingTreeCard && now - lastOcrNudgeMs >= OCR_NUDGE_MS) {
+            if (contentChanged && now - lastOcrNudgeMs >= OCR_NUDGE_MS) {
                 lastOcrNudgeMs = now
                 lastOcrTryMs = 0L
                 ocrCooldownMs = OCR_FAST_MS
+                ocrNudgeUntilMs = now + OCR_NUDGE_HOLD_MS
             }
         }
     }
@@ -405,6 +465,13 @@ class CalculatorService : AccessibilityService() {
             val cardStillUp = OverlayManager.isVisible() || (nowMs - lastShownMs < holdMs())
             val oldOfferStillOnScreen = nowMs - lastOfferMs < FRESH_OFFER_GAP_MS
             if (cardStillUp && oldOfferStillOnScreen) {
+                if (!cardConfirmed) {
+                    if (tight(disp, card) || ++ocrConfirmAttempts >= OCR_MAX_CONFIRM) {
+                        cardConfirmed = true
+                        ocrConfirmAttempts = 0
+                        DriveWinLog.log("calc", "leitura OCR consistente - card confirmado")
+                    }
+                }
                 if (disp.passenger == null && card.passenger != null) {
                     refreshPassenger(card)
                 } else {
@@ -435,6 +502,7 @@ class CalculatorService : AccessibilityService() {
                     "fare=${card.data.fare} km=${card.data.totalDistanceKm} min=${card.data.totalTimeMin}"
             )
             displayIfNew(card, isUber)
+            cardConfirmed = true
         } else {
             stableOcr = card
             stableOcrMs = nowMs
@@ -462,6 +530,9 @@ class CalculatorService : AccessibilityService() {
         shownIsUber = isUber
         lastShownMs = System.currentTimeMillis()
         stableOcr = null
+        ocrConfirmAttempts = 0
+        ocrEmptyStreak = 0
+        cardConfirmed = card.confidence >= 1.0
 
         setState(State.VALIDATING)
         val prefs = Prefs(this)
@@ -526,6 +597,17 @@ class CalculatorService : AccessibilityService() {
             near(x.totalTimeMin, y.totalTimeMin, 1.0)
     }
 
+    private fun tight(a: ParsedCard, b: ParsedCard): Boolean {
+        val x = a.data
+        val y = b.data
+        fun near(p: Double, q: Double, floor: Double): Boolean {
+            return Math.abs(p - q) <= Math.max(floor, Math.min(p, q) * 0.02)
+        }
+        return near(x.fare, y.fare, 0.05) &&
+            near(x.totalDistanceKm, y.totalDistanceKm, 0.05) &&
+            near(x.totalTimeMin, y.totalTimeMin, 0.25)
+    }
+
     private fun holdMs(): Long {
         return (Prefs(this).overlayShowSeconds * 1000L) + 2000L
     }
@@ -539,6 +621,9 @@ class CalculatorService : AccessibilityService() {
         scanSig = ""
         dismissedCard = null
         offerAbsentSince = 0L
+        cardConfirmed = false
+        ocrConfirmAttempts = 0
+        ocrEmptyStreak = 0
     }
 
     private fun refreshPassenger(card: ParsedCard) {
@@ -594,14 +679,17 @@ class CalculatorService : AccessibilityService() {
 
     companion object {
         private const val TAG = "DriveWin"
-        private const val OCR_CONFIRM_MIN_MS = 400L
+        private const val OCR_CONFIRM_MIN_MS = 250L
         private const val SCAN_INTERVAL_MS = 300L
         private const val OFFER_ABSENT_CONFIRM_MS = 2500L
         private const val RIDE_FALLBACK_MS = 6000L
         private const val RIDE_GONE_CONFIRM_MS = 2000L
-        private const val OCR_FAST_MS = 600L
+        private const val OCR_FAST_MS = 250L
+        private const val OCR_UPDATE_MS = 500L
         private const val OCR_IDLE_MS = 3000L
-        private const val OCR_NUDGE_MS = 1500L
+        private const val OCR_NUDGE_MS = 500L
+        private const val OCR_NUDGE_HOLD_MS = 1200L
+        private const val OCR_MAX_CONFIRM = 3
         private const val OFFER_ACTIVE_MS = 8000L
         private const val FRESH_OFFER_GAP_MS = 2500L
     }

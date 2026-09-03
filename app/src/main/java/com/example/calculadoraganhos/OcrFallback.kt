@@ -116,24 +116,24 @@ object OcrFallback {
     fun tryCaptureAndParse(
         context: Context,
         parser: (List<TextItem>) -> ParsedCard?,
-        onParsed: (ParsedCard, List<TextItem>) -> Unit
-    ) {
+        onResult: (ParsedCard?, List<TextItem>) -> Unit
+    ): Boolean {
         val projection = mediaProjection
         if (projection == null) {
             hint("captura manual NAO autorizada (use so em aparelhos antigos)")
-            return
+            return false
         }
-        if (!Prefs(context).ocrEnabled) return
+        if (!Prefs(context).ocrEnabled) return false
         val now = System.currentTimeMillis()
-        if (now - lastAttemptMs < COOLDOWN_MS) return
+        if (now - lastAttemptMs < COOLDOWN_MS) return false
         lastAttemptMs = now
 
-        try {
+        return try {
             if (thread == null) {
                 thread = HandlerThread("DriveWinOCR").also { it.start() }
                 handler = Handler(thread!!.looper)
             }
-            val h = handler ?: return
+            val h = handler ?: return false
             val wm = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
             val b = wm.currentWindowMetrics.bounds
             val width = b.width()
@@ -170,6 +170,7 @@ object OcrFallback {
                 }
                 if (image == null) {
                     cleanup()
+                    onResult(null, emptyList())
                     return@postDelayed
                 }
                 val plane = image.planes[0]
@@ -189,19 +190,21 @@ object OcrFallback {
                 runOcrOnBitmap(regionBmp, parser) { card, items ->
                     if (card != null) {
                         Log.d(TAG, "ocr ok fare=${card.data.fare} km=${card.data.totalDistanceKm} min=${card.data.totalTimeMin}")
-                        onParsed(card.copy(confidence = 0.6), items)
                     }
                     if (regionBmp !== finalBmp) finalBmp.recycle()
                     regionBmp.recycle()
                     cleanup()
+                    onResult(card?.copy(confidence = 0.6), items)
                 }
-            }, 250)
+            }, 150)
+            true
         } catch (e: Exception) {
             Log.w(TAG, "ocr capture fail: ${e.message}")
             try {
                 if (e is SecurityException) mediaProjection?.stop()
             } catch (_: Exception) {
             }
+            false
         }
     }
 }
