@@ -1,6 +1,7 @@
 package com.example.calculadoraganhos.ui
 
 import android.content.Context
+import android.os.Build
 import android.os.PowerManager
 import android.provider.Settings
 import androidx.compose.foundation.background
@@ -180,10 +181,16 @@ private fun LeituraScreen(
             )
         }
 
-        if (ocrAvail) {
+        if (Build.VERSION.SDK_INT >= 30) {
             Spacer(Modifier.height(12.dp))
             Text(
-                "OCR ativo: captura de tela autorizada (fallback)",
+                "OCR via acessibilidade: ativo automaticamente (sem dialogo)",
+                color = RosaLilas, fontSize = 11.sp
+            )
+        } else if (ocrAvail) {
+            Spacer(Modifier.height(12.dp))
+            Text(
+                "OCR ativo: captura manual autorizada",
                 color = RosaLilas, fontSize = 11.sp
             )
         }
@@ -440,25 +447,35 @@ private fun MetasScreen(modifier: Modifier = Modifier, requestCapture: () -> Uni
         ToggleRow("Alerta sonoro + vibracao", prefs.overlayAlert) { prefs.overlayAlert = it }
 
         Spacer(Modifier.height(24.dp))
-        Text("OCR (FALLBACK)", color = RosaLilas, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+        Text("OCR (LEITURA POR IMAGEM)", color = RosaLilas, fontSize = 13.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(4.dp))
         Text(
-            "Lê a TELA INTEIRA (qualquer app) enquanto o monitor estiver LIGADO. Usado quando a acessibilidade não conseguir ler o card.",
+            "Ativo sozinho quando o monitor estiver LIGADO: tira screenshot via Acessibilidade (sem pedir nada) e le o card na tela.",
             color = Color(0xFF8A8A8A), fontSize = 11.sp
         )
         ToggleRow("Ativar OCR", prefs.ocrEnabled) { prefs.ocrEnabled = it }
-        Spacer(Modifier.height(8.dp))
-        Button(
-            onClick = requestCapture,
-            modifier = Modifier.fillMaxWidth(),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                contentColor = RosaLilas
-            )
-        ) {
+        if (Build.VERSION.SDK_INT < 30) {
+            Spacer(Modifier.height(8.dp))
             Text(
-                if (OcrFallback.available()) "Captura de tela autorizada (TELA INTEIRA)"
-                else "Autorizar captura (escolha TELA INTEIRA)"
+                "Celular antigo: use a captura manual abaixo.",
+                color = Color(0xFF8A8A8A), fontSize = 11.sp
+            )
+            Spacer(Modifier.height(8.dp))
+            Button(
+                onClick = requestCapture,
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                    contentColor = RosaLilas
+                )
+            ) {
+                Text(if (OcrFallback.available()) "Captura manual autorizada" else "Autorizar captura manual")
+            }
+        } else {
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "Screenshot via acessibilidade: OK (sem dialogo)",
+                color = RosaLilas, fontSize = 11.sp
             )
         }
         Spacer(Modifier.height(24.dp))

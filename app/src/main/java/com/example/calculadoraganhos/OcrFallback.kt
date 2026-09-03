@@ -46,6 +46,44 @@ object OcrFallback {
 
     fun available(): Boolean = mediaProjection != null
 
+    fun runOcrOnBitmap(
+        bitmap: Bitmap,
+        parser: (List<TextItem>) -> ParsedCard?,
+        onResult: (ParsedCard?, List<TextItem>) -> Unit
+    ) {
+        try {
+            val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
+            recognizer.process(InputImage.fromBitmap(bitmap, 0))
+                .addOnSuccessListener { result ->
+                    val items = result.textBlocks
+                        .flatMap { block -> block.lines }
+                        .mapNotNull { line ->
+                            val box = line.boundingBox ?: return@mapNotNull null
+                            TextItem(
+                                line.text,
+                                Rect(box.left, box.top, box.right, box.bottom)
+                            )
+                        }
+                    val card = try {
+                        parser(items)
+                    } catch (e: Exception) {
+                        Log.w(TAG, "parser fail: ${e.message}")
+                        null
+                    }
+                    onResult(card, items)
+                    recognizer.close()
+                }
+                .addOnFailureListener { e ->
+                    Log.w(TAG, "ocr fail: ${e.message}")
+                    recognizer.close()
+                    onResult(null, emptyList())
+                }
+        } catch (e: Exception) {
+            Log.w(TAG, "ocr bitmap fail: ${e.message}")
+            onResult(null, emptyList())
+        }
+    }
+
     fun tryCaptureAndParse(
         context: Context,
         parser: (List<TextItem>) -> ParsedCard?,
@@ -53,7 +91,7 @@ object OcrFallback {
     ) {
         val projection = mediaProjection
         if (projection == null) {
-            hint("captura NAO autorizada - toque em LIGA na tela Leitura e escolha TELA INTEIRA")
+            hint("captura manual NAO autorizada (use so em aparelhos antigos)")
             return
         }
         if (!Prefs(context).ocrEnabled) return
@@ -118,32 +156,14 @@ object OcrFallback {
                 } else {
                     bitmap
                 }
-                val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
-                recognizer.process(InputImage.fromBitmap(finalBmp, 0))
-                    .addOnSuccessListener { result ->
-                        val items = result.textBlocks
-                            .flatMap { block -> block.lines }
-                            .mapNotNull { line ->
-                                val box = line.boundingBox ?: return@mapNotNull null
-                                TextItem(
-                                    line.text,
-                                    Rect(box.left, box.top, box.right, box.bottom)
-                                )
-                            }
-                        val card = parser(items)
-                        if (card != null) {
-                            Log.d(TAG, "ocr ok fare=${card.data.fare} km=${card.data.totalDistanceKm} min=${card.data.totalTimeMin}")
-                            onParsed(card.copy(confidence = 0.6), items)
-                        }
-                        recognizer.close()
-                        cleanup()
+                runOcrOnBitmap(finalBmp, parser) { card, items ->
+                    if (card != null) {
+                        Log.d(TAG, "ocr ok fare=${card.data.fare} km=${card.data.totalDistanceKm} min=${card.data.totalTimeMin}")
+                        onParsed(card.copy(confidence = 0.6), items)
                     }
-                    .addOnFailureListener { e ->
-                        Log.w(TAG, "ocr fail: ${e.message}")
-                        recognizer.close()
-                        cleanup()
-                    }
-                finalBmp.recycle()
+                    finalBmp.recycle()
+                    cleanup()
+                }
             }, 250)
         } catch (e: Exception) {
             Log.w(TAG, "ocr capture fail: ${e.message}")

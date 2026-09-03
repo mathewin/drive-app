@@ -1,10 +1,18 @@
 package com.example.calculadoraganhos
 
 import android.accessibilityservice.AccessibilityService
+import android.accessibilityservice.AccessibilityService.ScreenshotResult
+import android.accessibilityservice.AccessibilityService.TakeScreenshotCallback
+import android.graphics.Bitmap
 import android.graphics.Rect
+import android.os.Build
+import android.os.Handler
+import android.os.HandlerThread
 import android.util.Log
+import android.view.Display
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
+import java.util.concurrent.Executor
 
 class CalculatorService : AccessibilityService() {
 
@@ -42,16 +50,57 @@ class CalculatorService : AccessibilityService() {
         }
     }
 
+    private var shotExecutor: Executor? = null
+
     private fun tryOcr(parser: CardParserBase, isUber: Boolean) {
         val now = System.currentTimeMillis()
-        if (now - lastOcrTryMs < 8000) return
+        if (now - lastOcrTryMs < 6000) return
         lastOcrTryMs = now
-        DriveWinLog.log("calc", "OCR da tela - lendo pixels (a11y nao achou card)")
-        OcrFallback.tryCaptureAndParse(
-            this,
-            parser = { parser.parse(it) }
-        ) { ocrCard, ocrItems ->
-            DriveWinLog.log("calc", "OCR retornou card - validando")
+        DriveWinLog.log("calc", "OCR: lendo a tela por imagem (acessibilidade)")
+        if (Build.VERSION.SDK_INT >= 30) {
+            try {
+                val ex = shotExecutor ?: HandlerThread("DriveWinShot").also { it.start() }
+                    .let { st -> Executor { r -> Handler(st.looper).post(r) } }
+                    .also { shotExecutor = it }
+                takeScreenshot(Display.DEFAULT_DISPLAY, ex, object : TakeScreenshotCallback {
+                    override fun onSuccess(screenshot: ScreenshotResult) {
+                        val hb = screenshot.hardwareBuffer
+                        val bmp = try {
+                            val wrapped = if (Build.VERSION.SDK_INT >= 31) {
+                                Bitmap.wrapHardwareBuffer(hb, screenshot.colorSpace)
+                            } else {
+                                Bitmap.wrapHardwareBuffer(hb, null)
+                            }
+                            wrapped?.copy(Bitmap.Config.ARGB_8888, false)
+                        } catch (e: Exception) {
+                            null
+                        } finally {
+                            hb.close()
+                        }
+                        if (bmp == null) {
+                            DriveWinLog.log("calc", "screenshot vazio ou falha ao converter")
+                            return
+                        }
+                        OcrFallback.runOcrOnBitmap(bmp, { parser.parse(it) }) { card, items ->
+                            if (items.isNotEmpty()) dumpTexts("ocr", items)
+                            if (card != null) {
+                                DriveWinLog.log("calc", "OCR retornou card - validando")
+                                handleCard(card.copy(confidence = 0.6), isUber, System.currentTimeMillis())
+                            }
+                        }
+                    }
+
+                    override fun onFailure(errorCode: Int) {
+                        DriveWinLog.log("calc", "screenshot da acessibilidade falhou (codigo $errorCode)")
+                    }
+                })
+            } catch (e: Exception) {
+                DriveWinLog.log("calc", "erro no screenshot: ${e.message}")
+            }
+            return
+        }
+        OcrFallback.tryCaptureAndParse(this, parser = { parser.parse(it) }) { ocrCard, ocrItems ->
+            DriveWinLog.log("calc", "OCR (media projection) retornou card - validando")
             if (ocrItems.isNotEmpty()) dumpTexts("ocr", ocrItems)
             handleCard(ocrCard, isUber, System.currentTimeMillis())
         }
