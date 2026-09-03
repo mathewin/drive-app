@@ -22,6 +22,7 @@ class CalculatorService : AccessibilityService() {
     private var lastEventMs = 0L
     private var lastHash: String? = null
     private var shownCard: ParsedCard? = null
+    private var shownIsUber = true
     private var lastShownMs = 0L
     private var stableOcr: ParsedCard? = null
     private var stableOcrMs = 0L
@@ -298,11 +299,15 @@ class CalculatorService : AccessibilityService() {
         if (disp != null && similar(disp, card)) {
             val lastShownAge = nowMs - lastShownMs
             if (lastShownAge < holdMs() || lastShownAge < SIMILAR_LOCK_MS) {
-                DriveWinLog.log(
-                    "calc",
-                    "mesma oferta ainda na tela (variacao de leitura) - mantendo " +
-                        "fare=${card.data.fare} km=${card.data.totalDistanceKm} min=${card.data.totalTimeMin}"
-                )
+                if (disp.passenger == null && card.passenger != null) {
+                    refreshPassenger(card)
+                } else {
+                    DriveWinLog.log(
+                        "calc",
+                        "mesma oferta ainda na tela (variacao de leitura) - mantendo " +
+                            "fare=${card.data.fare} km=${card.data.totalDistanceKm} min=${card.data.totalTimeMin}"
+                    )
+                }
                 return
             }
         }
@@ -347,6 +352,7 @@ class CalculatorService : AccessibilityService() {
         }
         lastHash = hash
         shownCard = card
+        shownIsUber = isUber
         lastShownMs = System.currentTimeMillis()
         stableOcr = null
 
@@ -422,6 +428,28 @@ class CalculatorService : AccessibilityService() {
         lastHash = null
         stableOcr = null
         stableOcrMs = 0L
+    }
+
+    private fun refreshPassenger(card: ParsedCard) {
+        val old = shownCard ?: return
+        if (old.passenger != null || card.passenger == null) return
+        shownCard = old.copy(passenger = card.passenger)
+        val prefs = Prefs(this)
+        val res = Calculator.calculate(old.data, prefs.minPerKm, prefs.minPerHour)
+        val app = if (shownIsUber) "Uber" else "99"
+        DriveWinLog.log("calc", "PASSAGEIRO detectado em leitura seguinte - atualizando card (${card.passenger})")
+        OverlayManager.show(
+            this,
+            OverlayManager.OverlayContent(
+                old.data,
+                res,
+                app,
+                old.suspicious,
+                old.confidence,
+                passenger = card.passenger
+            ),
+            beep = false
+        )
     }
 
     private fun setState(s: State) {
