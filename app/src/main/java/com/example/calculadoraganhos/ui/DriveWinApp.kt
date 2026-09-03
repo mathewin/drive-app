@@ -443,7 +443,7 @@ private fun MetasScreen(modifier: Modifier = Modifier, requestCapture: () -> Uni
         Text("OCR (FALLBACK)", color = RosaLilas, fontSize = 13.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(4.dp))
         Text(
-            "Usado apenas quando a acessibilidade nao conseguir ler o card.",
+            "Lê a TELA INTEIRA (qualquer app) enquanto o monitor estiver LIGADO. Usado quando a acessibilidade não conseguir ler o card.",
             color = Color(0xFF8A8A8A), fontSize = 11.sp
         )
         ToggleRow("Ativar OCR", prefs.ocrEnabled) { prefs.ocrEnabled = it }
@@ -456,7 +456,10 @@ private fun MetasScreen(modifier: Modifier = Modifier, requestCapture: () -> Uni
                 contentColor = RosaLilas
             )
         ) {
-            Text(if (OcrFallback.available()) "Captura de tela autorizada" else "Autorizar captura de tela")
+            Text(
+                if (OcrFallback.available()) "Captura de tela autorizada (TELA INTEIRA)"
+                else "Autorizar captura (escolha TELA INTEIRA)"
+            )
         }
         Spacer(Modifier.height(24.dp))
     }

@@ -23,8 +23,16 @@ object OcrFallback {
 
     private var mediaProjection: MediaProjection? = null
     private var lastAttemptMs = 0L
+    private var lastHintMs = 0L
     private var thread: HandlerThread? = null
     private var handler: Handler? = null
+
+    private fun hint(msg: String) {
+        val now = System.currentTimeMillis()
+        if (now - lastHintMs < 15000) return
+        lastHintMs = now
+        DriveWinLog.log("ocr", msg)
+    }
 
     fun setProjection(projection: MediaProjection?) {
         mediaProjection?.stop()
@@ -43,7 +51,11 @@ object OcrFallback {
         parser: (List<TextItem>) -> ParsedCard?,
         onParsed: (ParsedCard, List<TextItem>) -> Unit
     ) {
-        val projection = mediaProjection ?: return
+        val projection = mediaProjection
+        if (projection == null) {
+            hint("captura NAO autorizada - toque em LIGA na tela Leitura e escolha TELA INTEIRA")
+            return
+        }
         if (!Prefs(context).ocrEnabled) return
         val now = System.currentTimeMillis()
         if (now - lastAttemptMs < COOLDOWN_MS) return

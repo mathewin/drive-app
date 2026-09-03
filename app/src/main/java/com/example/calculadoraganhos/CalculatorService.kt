@@ -15,7 +15,7 @@ class CalculatorService : AccessibilityService() {
     private var lastHash: String? = null
     private var pending: ParsedCard? = null
     private var pendingMs = 0L
-    private var ocrAttempted = false
+    private var lastOcrTryMs = 0L
     private var lastCtxTag = ""
     private var lastCtxMs = 0L
     private var lastDumpMs = 0L
@@ -43,9 +43,10 @@ class CalculatorService : AccessibilityService() {
     }
 
     private fun tryOcr(parser: CardParserBase, isUber: Boolean) {
-        if (ocrAttempted) return
-        ocrAttempted = true
-        DriveWinLog.log("calc", "tentando OCR (se autorizado)")
+        val now = System.currentTimeMillis()
+        if (now - lastOcrTryMs < 8000) return
+        lastOcrTryMs = now
+        DriveWinLog.log("calc", "OCR da tela - lendo pixels (a11y nao achou card)")
         OcrFallback.tryCaptureAndParse(
             this,
             parser = { parser.parse(it) }
@@ -87,7 +88,6 @@ class CalculatorService : AccessibilityService() {
                 OverlayManager.hide()
                 DriveWinLog.log("calc", "saiu do app de corrida - card escondido")
             }
-            ocrAttempted = false
             setState(State.IDLE)
             return
         }
@@ -101,37 +101,28 @@ class CalculatorService : AccessibilityService() {
         val items = collect(root)
         val texts = items.map { it.text }
         val parser = if (isUber) UberParser else NinetyNineParser
-        if (items.isEmpty()) {
-            logCtx(pkg, isUber, "app aberto SEM oferta visivel (estado $state)")
-            setState(State.IDLE)
-            return
-        }
         val hasWords = ParsingUtils.offerContext(texts)
         val hasMoney = ParsingUtils.hasMoney(texts)
         val hasKmOrMin = ParsingUtils.kmValues(texts).isNotEmpty() ||
             ParsingUtils.minutesValues(texts).isNotEmpty()
-        if (!hasWords) {
-            if (hasMoney && hasKmOrMin) {
-                logCtx(pkg, isUber, "valor+km/min sem palavra de oferta - dump + OCR")
-                dumpTexts("a11y", items)
-                tryOcr(parser, isUber)
-                setState(State.IDLE)
-            } else {
-                logCtx(pkg, isUber, "app aberto SEM oferta visivel (estado $state)")
-                setState(State.IDLE)
-            }
-            return
-        }
+        val canDirect = hasWords || (hasMoney && hasKmOrMin)
 
-        setState(State.READING)
-        val card = parser.parse(items)
-        if (card == null) {
+        if (canDirect) {
+            setState(State.READING)
+            val card = parser.parse(items)
+            if (card != null) {
+                handleCard(card, isUber, now)
+                return
+            }
             DriveWinLog.log("calc", "parse direto falhou (textos: ${texts.size})")
             dumpTexts("a11y", items)
-            tryOcr(parser, isUber)
-            return
+        } else {
+            logCtx(pkg, isUber, "app aberto SEM oferta visivel (estado $state)")
+            if (items.isNotEmpty() && (hasMoney || hasKmOrMin)) dumpTexts("a11y", items)
         }
-        handleCard(card, isUber, now)
+
+        tryOcr(parser, isUber)
+        setState(State.IDLE)
     }
 
     override fun onInterrupt() {
@@ -179,7 +170,6 @@ class CalculatorService : AccessibilityService() {
             return
         }
         lastHash = hash
-        ocrAttempted = false
 
         setState(State.VALIDATING)
         val prefs = Prefs(this)

@@ -5,8 +5,10 @@ import android.app.NotificationManager
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ServiceInfo
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
+import androidx.core.app.ServiceCompat
 
 class RideForegroundService : Service() {
 
@@ -44,7 +46,17 @@ class RideForegroundService : Service() {
             .setOngoing(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .build()
-        startForeground(NOTIF_ID, notif)
+        if (android.os.Build.VERSION.SDK_INT >= 29) {
+            val type = if (android.os.Build.VERSION.SDK_INT >= 34) {
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE or
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION
+            } else {
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION
+            }
+            ServiceCompat.startForeground(this, NOTIF_ID, notif, type)
+        } else {
+            startForeground(NOTIF_ID, notif)
+        }
     }
 
     companion object {

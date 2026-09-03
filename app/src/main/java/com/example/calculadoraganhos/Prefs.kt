@@ -54,7 +54,7 @@ class Prefs(context: Context) {
         set(v) = sp.edit().putBoolean("monitor_on", v).apply()
 
     var ocrEnabled: Boolean
-        get() = sp.getBoolean("ocr_enabled", false)
+        get() = sp.getBoolean("ocr_enabled", true)
         set(v) = sp.edit().putBoolean("ocr_enabled", v).apply()
 
     var lastOffer: String?

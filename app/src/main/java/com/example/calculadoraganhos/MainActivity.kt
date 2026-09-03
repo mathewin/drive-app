@@ -19,6 +19,8 @@ import com.example.calculadoraganhos.ui.DriveWinTheme
 
 class MainActivity : ComponentActivity() {
 
+    private var captureAfterNotif = false
+
     private val captureLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
@@ -26,16 +28,20 @@ class MainActivity : ComponentActivity() {
             val mpm = getSystemService(MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
             val projection = mpm.getMediaProjection(result.resultCode, result.data!!)
             OcrFallback.setProjection(projection)
-            Toast.makeText(this, "Captura de tela autorizada", Toast.LENGTH_SHORT).show()
+            Prefs(this).ocrEnabled = true
+            DriveWinLog.log("app", "captura de tela autorizada - OCR ativo")
+            Toast.makeText(this, "Captura autorizada (TELA INTEIRA). OCR ativo.", Toast.LENGTH_LONG).show()
         } else {
-            Toast.makeText(this, "Captura nao autorizada", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "Captura nao autorizada - OCR desativado", Toast.LENGTH_SHORT).show()
         }
     }
 
     private val notifPermLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
-        if (granted) RideForegroundService.start(this)
+        DriveWinLog.log("app", if (granted) "notificacao autorizada" else "notificacao negada")
+        launchMonitorAfterNotif(captureAfterNotif)
+        captureAfterNotif = false
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -94,7 +100,6 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
-        OcrFallback.setProjection(null)
         super.onDestroy()
     }
 
@@ -121,21 +126,36 @@ class MainActivity : ComponentActivity() {
             }
             Prefs(this).monitorOn = true
             DriveWinLog.log("app", "LIGADO - leitura ativa")
+            launchMonitor(!OcrFallback.available())
             toast("Monitoramento LIGADO - abra a Uber ou a 99")
-            if (Build.VERSION.SDK_INT >= 33 &&
-                ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
-                != PackageManager.PERMISSION_GRANTED
-            ) {
-                notifPermLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-            } else {
-                RideForegroundService.start(this)
-            }
         } else {
             Prefs(this).monitorOn = false
             DriveWinLog.log("app", "DESLIGADO")
+            OcrFallback.setProjection(null)
             RideForegroundService.stop(this)
             OverlayManager.hide()
             toast("Monitoramento DESLIGADO")
+        }
+    }
+
+    private fun launchMonitor(capture: Boolean) {
+        val needNotif = Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(
+            this, Manifest.permission.POST_NOTIFICATIONS
+        ) != PackageManager.PERMISSION_GRANTED
+        if (needNotif) {
+            captureAfterNotif = capture
+            notifPermLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        } else {
+            launchMonitorAfterNotif(capture)
+        }
+    }
+
+    private fun launchMonitorAfterNotif(capture: Boolean) {
+        RideForegroundService.start(this)
+        if (capture) {
+            DriveWinLog.log("app", "LIGAR: pedindo autorizacao de captura de tela")
+            toast("Confirme a captura e escolha TELA INTEIRA")
+            requestCapture()
         }
     }
 
