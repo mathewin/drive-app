@@ -19,7 +19,6 @@ class CalculatorService : AccessibilityService() {
     enum class State { IDLE, DETECTING, READING, VALIDATING, CALCULATING, DISPLAYING }
 
     private var state = State.IDLE
-    private var lastEventMs = 0L
     private var lastHash: String? = null
     private var shownCard: ParsedCard? = null
     private var shownIsUber = true
@@ -27,11 +26,8 @@ class CalculatorService : AccessibilityService() {
     private var stableOcr: ParsedCard? = null
     private var stableOcrMs = 0L
     private var lastOcrTryMs = 0L
-    private var lastCtxTag = ""
-    private var lastCtxMs = 0L
     private var lastDumpMs = 0L
-    private var ocrCooldownMs = OCR_SLOW_MS
-    private var lastTextSig = ""
+    private var ocrCooldownMs = OCR_IDLE_MS
     private var scanSig = ""
     private var lastOfferishMs = 0L
     private var lastOfferMs = 0L
@@ -44,16 +40,8 @@ class CalculatorService : AccessibilityService() {
     private var scanHandler: Handler? = null
     private var scanPosted = false
     private var offerAbsentSince = 0L
-
-    private fun logCtx(pkg: String, isUber: Boolean, msg: String) {
-        val now = System.currentTimeMillis()
-        val tag = if (isUber) "uber" else "99"
-        if (tag != lastCtxTag || now - lastCtxMs > 2500) {
-            lastCtxTag = tag
-            lastCtxMs = now
-            DriveWinLog.log("calc", msg)
-        }
-    }
+    private var lastOcrNudgeMs = 0L
+    private var lastLeaveCheckMs = 0L
 
     private fun dumpTexts(source: String, items: List<TextItem>) {
         val now = System.currentTimeMillis()
@@ -172,22 +160,16 @@ class CalculatorService : AccessibilityService() {
 
     private fun registerCardCloseRelease() {
         OverlayManager.onCardClosed = {
-            DriveWinLog.log("calc", "card fechado (toque ou tempo) - leitura liberada imediatamente")
             stableOcr = null
             stableOcrMs = 0L
-            shownCard = null
-            lastShownMs = 0L
-            scanSig = ""
-            lastTextSig = ""
-            offerAbsentSince = 0L
-            if (state == State.DISPLAYING) setState(State.IDLE)
+            DriveWinLog.log("calc", "card fechado (toque ou tempo) - mesma oferta nao sera reexibida")
         }
     }
 
     private fun noteOfferAbsent() {
         val now = System.currentTimeMillis()
         val stale = shownCard != null || state != State.IDLE ||
-            scanSig.isNotEmpty() || lastTextSig.isNotEmpty() || lastHash != null
+            scanSig.isNotEmpty() || lastHash != null
         if (!stale) {
             offerAbsentSince = 0L
             return
@@ -245,10 +227,9 @@ class CalculatorService : AccessibilityService() {
             return
         }
         scheduleScan()
-        if (ocrInFlight) return
         val now = System.currentTimeMillis()
         if (!updateRideFocus(now)) {
-            ocrCooldownMs = OCR_SLOW_MS
+            ocrCooldownMs = OCR_IDLE_MS
             if (shownCard != null || state == State.DISPLAYING) {
                 OverlayManager.hide()
                 resetOfferState()
@@ -259,12 +240,13 @@ class CalculatorService : AccessibilityService() {
         }
         val parser = if (lastScannerUber) UberParser else NinetyNineParser
         if (treeDetectOffer(parser, lastScannerUber)) return
+        val displayingTreeCard = state == State.DISPLAYING && scanSig.isNotEmpty()
         ocrCooldownMs = when {
-            state == State.DISPLAYING -> OCR_DISPLAY_MS
-            lastOfferish -> OCR_FAST_MS
-            else -> OCR_SLOW_MS
+            displayingTreeCard -> -1L
+            now - lastOfferishMs < OFFER_ACTIVE_MS -> OCR_FAST_MS
+            else -> OCR_IDLE_MS
         }
-        tryOcr(parser, lastScannerUber)
+        if (ocrCooldownMs > 0L) tryOcr(parser, lastScannerUber)
     }
 
     private fun treeDetectOffer(parser: CardParserBase, isUber: Boolean): Boolean {
@@ -341,85 +323,39 @@ class CalculatorService : AccessibilityService() {
             return
         }
         startScanner()
-        val activeRoot = rootInActiveWindow
-        val activePkg = activeRoot?.packageName?.toString()?.lowercase()
-        var isUber = activePkg?.contains("com.ubercab") == true
-        var isNinetyNine = activePkg?.contains("br.com.taxiapp") == true
-        var root = activeRoot
-        var pkg = activePkg
-        if (!isUber && !isNinetyNine) {
-            val (wp, wr) = rideWindowPackageAndRoot()
-            if (wp != null) {
-                isUber = wp.contains("com.ubercab")
-                isNinetyNine = wp.contains("br.com.taxiapp")
-                pkg = wp
-                root = wr
-            }
-        }
-        if (isUber || isNinetyNine) {
+        val now = System.currentTimeMillis()
+        val pkg = rootInActiveWindow?.packageName?.toString()?.lowercase()
+        val rideActive = pkg?.contains("com.ubercab") == true ||
+            pkg?.contains("br.com.taxiapp") == true
+        if (rideActive) {
             lastForegroundRide = true
-            lastRideEvtMs = System.currentTimeMillis()
-            lastScannerUber = isUber
-        } else {
-            if (state == State.DISPLAYING) {
-                OverlayManager.hide()
-                DriveWinLog.log("calc", "saiu do app de corrida - card escondido")
+            lastRideEvtMs = now
+            lastScannerUber = pkg!!.contains("com.ubercab")
+            val t = event?.eventType ?: 0
+            val contentChanged = t == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED ||
+                t == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED ||
+                t == AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED
+            val displayingTreeCard = state == State.DISPLAYING && scanSig.isNotEmpty()
+            if (contentChanged && !displayingTreeCard && now - lastOcrNudgeMs >= OCR_NUDGE_MS) {
+                lastOcrNudgeMs = now
+                lastOcrTryMs = 0L
+                ocrCooldownMs = OCR_FAST_MS
             }
-            lastForegroundRide = false
-            resetOfferState()
-            setState(State.IDLE)
             return
         }
-        if (root == null) return
-        logCtx(pkg ?: "", isUber, "vendo ${if (isUber) "UBER" else "99"} - aguardando oferta")
-        val now = System.currentTimeMillis()
-        if (now - lastEventMs < DEBOUNCE_MS) return
-        lastEventMs = now
-
-        setState(State.DETECTING)
-        val items = collect(root)
-        val texts = items.map { it.text }
-        val parser = if (isUber) UberParser else NinetyNineParser
-        val hasWords = ParsingUtils.offerContext(texts)
-        val hasMoney = ParsingUtils.hasMoney(texts)
-        val hasKmOrMin = ParsingUtils.kmValues(texts).isNotEmpty() ||
-            ParsingUtils.minutesValues(texts).isNotEmpty()
-        val canDirect = hasWords || (hasMoney && hasKmOrMin)
-        lastOfferish = hasMoney || hasKmOrMin || hasWords
-        if (lastOfferish) lastOfferishMs = now
-        if (hasMoney && hasKmOrMin) lastOfferMs = now
-
-        if (canDirect) {
-            setState(State.READING)
-            val card = parser.parse(items)
-            if (card != null) {
-                handleCard(card, isUber, now)
-                return
-            }
-            DriveWinLog.log("calc", "parse direto falhou (textos: ${texts.size})")
-            dumpTexts("a11y", items)
-        } else {
-            logCtx(pkg ?: "", isUber, "app aberto SEM oferta visivel (estado $state)")
-            if (items.isNotEmpty() && (hasMoney || hasKmOrMin)) dumpTexts("a11y", items)
-        }
-
-        ocrCooldownMs = if (hasMoney || hasKmOrMin || hasWords) OCR_FAST_MS else OCR_SLOW_MS
-        val sig = buildString {
-            if (hasMoney || hasKmOrMin || hasWords) {
-                (ParsingUtils.moneyValues(texts) + ParsingUtils.kmValues(texts) +
-                    ParsingUtils.minutesValues(texts))
-                    .map { Math.round(it * 10) }
-                    .sorted()
-                    .forEach { append(it).append(',') }
+        if (shownCard != null || state == State.DISPLAYING) {
+            if (now - lastLeaveCheckMs >= LEAVE_CHECK_MS) {
+                lastLeaveCheckMs = now
+                val (wp, _) = rideWindowPackageAndRoot()
+                if (wp == null) {
+                    OverlayManager.hide()
+                    resetOfferState()
+                    setState(State.IDLE)
+                    lastForegroundRide = false
+                    DriveWinLog.log("calc", "saiu do app de corrida - card escondido")
+                }
             }
         }
-        if (sig.isNotEmpty() && sig != lastTextSig) {
-            DriveWinLog.log("calc", "nova composicao numerica na tela - OCR imediato")
-            lastOcrTryMs = 0L
-        }
-        lastTextSig = sig
-        tryOcr(parser, isUber)
-        setState(State.IDLE)
     }
 
     override fun onInterrupt() {
@@ -574,7 +510,6 @@ class CalculatorService : AccessibilityService() {
         stableOcr = null
         stableOcrMs = 0L
         scanSig = ""
-        lastTextSig = ""
         offerAbsentSince = 0L
     }
 
@@ -630,14 +565,15 @@ class CalculatorService : AccessibilityService() {
 
     companion object {
         private const val TAG = "DriveWin"
-        private const val DEBOUNCE_MS = 100L
         private const val OCR_CONFIRM_MIN_MS = 400L
         private const val SCAN_INTERVAL_MS = 300L
         private const val OFFER_ABSENT_CONFIRM_MS = 700L
         private const val RIDE_WINDOW_MS = 600000L
         private const val OCR_FAST_MS = 600L
-        private const val OCR_SLOW_MS = 900L
-        private const val OCR_DISPLAY_MS = 800L
+        private const val OCR_IDLE_MS = 3000L
+        private const val OCR_NUDGE_MS = 1500L
+        private const val OFFER_ACTIVE_MS = 8000L
         private const val FRESH_OFFER_GAP_MS = 2500L
+        private const val LEAVE_CHECK_MS = 400L
     }
 }
