@@ -49,6 +49,7 @@ class CalculatorService : AccessibilityService() {
     private var cardConfirmed = false
     private var ocrConfirmAttempts = 0
     private var ocrEmptyStreak = 0
+    private var staleOtherSince = 0L
 
     private fun dumpTexts(source: String, items: List<TextItem>) {
         val now = System.currentTimeMillis()
@@ -351,6 +352,30 @@ class CalculatorService : AccessibilityService() {
         } else if (prevMoneySeen) {
             prevMoneySeen = false
         }
+        if (shownCard != null && state == State.DISPLAYING) {
+            val scanNow = System.currentTimeMillis()
+            val shownFare = shownCard!!.data.fare
+            val fareHere = hasMoney && ParsingUtils.moneyValues(texts).any { v ->
+                Math.abs(v - shownFare) <= Math.max(0.1, Math.min(v, shownFare) * 0.05)
+            }
+            if (fareHere) {
+                staleOtherSince = 0L
+            } else if (hasMoney || hasKmOrMin) {
+                if (staleOtherSince == 0L) {
+                    staleOtherSince = scanNow
+                } else if (scanNow - staleOtherSince >= STALE_OFFER_MS) {
+                    staleOtherSince = 0L
+                    OverlayManager.hide()
+                    resetOfferState()
+                    setState(State.IDLE)
+                    DriveWinLog.log(
+                        "calc",
+                        "conteudo da tela ja nao mostra a corrida lida - card escondido"
+                    )
+                    return true
+                }
+            }
+        }
         if (!hasMoney && !hasKmOrMin) {
             noteOfferAbsent()
             if (ParsingUtils.offerContext(texts)) {
@@ -624,6 +649,7 @@ class CalculatorService : AccessibilityService() {
         cardConfirmed = false
         ocrConfirmAttempts = 0
         ocrEmptyStreak = 0
+        staleOtherSince = 0L
     }
 
     private fun refreshPassenger(card: ParsedCard) {
@@ -692,5 +718,6 @@ class CalculatorService : AccessibilityService() {
         private const val OCR_MAX_CONFIRM = 3
         private const val OFFER_ACTIVE_MS = 8000L
         private const val FRESH_OFFER_GAP_MS = 2500L
+        private const val STALE_OFFER_MS = 1200L
     }
 }
