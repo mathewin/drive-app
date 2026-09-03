@@ -165,6 +165,37 @@ class CalculatorService : AccessibilityService() {
         }
     }
 
+    private fun rideWindowPackageAndRoot(): Pair<String?, AccessibilityNodeInfo?> {
+        try {
+            for (w in windows) {
+                val r = w.root ?: continue
+                val p = r.packageName?.toString()?.lowercase() ?: continue
+                if (p.contains("com.ubercab") || p.contains("br.com.taxiapp")) {
+                    return p to r
+                }
+            }
+        } catch (_: Exception) {
+        }
+        val r2 = rootInActiveWindow
+        val p2 = r2?.packageName?.toString()?.lowercase()
+        if (p2 != null && (p2.contains("com.ubercab") || p2.contains("br.com.taxiapp"))) {
+            return p2 to r2
+        }
+        return null to null
+    }
+
+    private fun updateRideFocus(now: Long): Boolean {
+        val (pkg, _) = rideWindowPackageAndRoot()
+        if (pkg != null) {
+            lastForegroundRide = true
+            lastRideEvtMs = now
+            lastScannerUber = pkg.contains("com.ubercab")
+            return true
+        }
+        val evRiding = lastForegroundRide && now - lastRideEvtMs < RIDE_WINDOW_MS
+        return evRiding
+    }
+
     private fun scanTick() {
         scanPosted = false
         if (!Prefs(this).monitorOn) {
@@ -174,20 +205,14 @@ class CalculatorService : AccessibilityService() {
         scheduleScan()
         if (ocrInFlight) return
         val now = System.currentTimeMillis()
-        var riding = lastForegroundRide && now - lastRideEvtMs < RIDE_WINDOW_MS
-        if (!riding) {
-            val pkg = rootInActiveWindow?.packageName?.toString()?.lowercase()
-            if (pkg != null &&
-                (pkg.contains("com.ubercab") || pkg.contains("br.com.taxiapp"))
-            ) {
-                lastForegroundRide = true
-                lastRideEvtMs = now
-                lastScannerUber = pkg.contains("com.ubercab")
-                riding = true
-            }
-        }
-        if (!riding) {
+        if (!updateRideFocus(now)) {
             ocrCooldownMs = OCR_SLOW_MS
+            if (shownCard != null || state == State.DISPLAYING) {
+                OverlayManager.hide()
+                resetOfferState()
+                setState(State.IDLE)
+                DriveWinLog.log("calc", "janela de corrida sumiu - card escondido")
+            }
             return
         }
         val parser = if (lastScannerUber) UberParser else NinetyNineParser
@@ -201,9 +226,8 @@ class CalculatorService : AccessibilityService() {
     }
 
     private fun treeDetectOffer(parser: CardParserBase, isUber: Boolean): Boolean {
-        val root = rootInActiveWindow ?: return false
-        val pkg = root.packageName?.toString()?.lowercase() ?: return false
-        if (!pkg.contains("com.ubercab") && !pkg.contains("br.com.taxiapp")) return false
+        val (_, root) = rideWindowPackageAndRoot() ?: return false
+        if (root == null) return false
         val items = collect(root)
         if (items.isEmpty()) return false
         val texts = items.map { it.text }
@@ -267,27 +291,37 @@ class CalculatorService : AccessibilityService() {
             return
         }
         startScanner()
-        val root = rootInActiveWindow ?: return
-        val pkg = root.packageName?.toString()?.lowercase() ?: return
-        val isUber = pkg.contains("com.ubercab")
-        val isNinetyNine = pkg.contains("br.com.taxiapp")
+        val activeRoot = rootInActiveWindow
+        val activePkg = activeRoot?.packageName?.toString()?.lowercase()
+        var isUber = activePkg?.contains("com.ubercab") == true
+        var isNinetyNine = activePkg?.contains("br.com.taxiapp") == true
+        var root = activeRoot
+        var pkg = activePkg
+        if (!isUber && !isNinetyNine) {
+            val (wp, wr) = rideWindowPackageAndRoot()
+            if (wp != null) {
+                isUber = wp.contains("com.ubercab")
+                isNinetyNine = wp.contains("br.com.taxiapp")
+                pkg = wp
+                root = wr
+            }
+        }
         if (isUber || isNinetyNine) {
             lastForegroundRide = true
             lastRideEvtMs = System.currentTimeMillis()
             lastScannerUber = isUber
         } else {
-            lastForegroundRide = false
-        }
-        if (!isUber && !isNinetyNine) {
             if (state == State.DISPLAYING) {
                 OverlayManager.hide()
                 DriveWinLog.log("calc", "saiu do app de corrida - card escondido")
             }
+            lastForegroundRide = false
             resetOfferState()
             setState(State.IDLE)
             return
         }
-        logCtx(pkg, isUber, "vendo ${if (isUber) "UBER" else "99"} - aguardando oferta")
+        if (root == null) return
+        logCtx(pkg ?: "", isUber, "vendo ${if (isUber) "UBER" else "99"} - aguardando oferta")
         val now = System.currentTimeMillis()
         if (now - lastEventMs < DEBOUNCE_MS) return
         lastEventMs = now
@@ -315,7 +349,7 @@ class CalculatorService : AccessibilityService() {
             DriveWinLog.log("calc", "parse direto falhou (textos: ${texts.size})")
             dumpTexts("a11y", items)
         } else {
-            logCtx(pkg, isUber, "app aberto SEM oferta visivel (estado $state)")
+            logCtx(pkg ?: "", isUber, "app aberto SEM oferta visivel (estado $state)")
             if (items.isNotEmpty() && (hasMoney || hasKmOrMin)) dumpTexts("a11y", items)
         }
 
