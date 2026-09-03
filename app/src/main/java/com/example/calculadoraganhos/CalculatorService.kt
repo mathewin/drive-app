@@ -32,6 +32,8 @@ class CalculatorService : AccessibilityService() {
     private var ocrInFlight = false
     private var lastScannerUber = true
     private var lastOfferish = false
+    private var lastForegroundRide = false
+    private var lastRideEvtMs = 0L
     private var scanThread: HandlerThread? = null
     private var scanHandler: Handler? = null
     private var scanPosted = false
@@ -165,6 +167,12 @@ class CalculatorService : AccessibilityService() {
         }
         scheduleScan()
         if (ocrInFlight) return
+        val now = System.currentTimeMillis()
+        val riding = lastForegroundRide && now - lastRideEvtMs < RIDE_WINDOW_MS
+        if (!riding) {
+            ocrCooldownMs = OCR_SLOW_MS
+            return
+        }
         ocrCooldownMs = when {
             state == State.DISPLAYING -> OCR_DISPLAY_MS
             lastOfferish -> OCR_FAST_MS
@@ -203,6 +211,13 @@ class CalculatorService : AccessibilityService() {
         val pkg = root.packageName?.toString()?.lowercase() ?: return
         val isUber = pkg.contains("com.ubercab")
         val isNinetyNine = pkg.contains("br.com.taxiapp")
+        if (isUber || isNinetyNine) {
+            lastForegroundRide = true
+            lastRideEvtMs = System.currentTimeMillis()
+            lastScannerUber = isUber
+        } else {
+            lastForegroundRide = false
+        }
         if (!isUber && !isNinetyNine) {
             if (state == State.DISPLAYING) {
                 OverlayManager.hide()
@@ -211,8 +226,6 @@ class CalculatorService : AccessibilityService() {
             setState(State.IDLE)
             return
         }
-        lastScannerUber = isUber
-
         logCtx(pkg, isUber, "vendo ${if (isUber) "UBER" else "99"} - aguardando oferta")
         val now = System.currentTimeMillis()
         if (now - lastEventMs < DEBOUNCE_MS) return
@@ -399,6 +412,7 @@ class CalculatorService : AccessibilityService() {
         private const val DEBOUNCE_MS = 100L
         private const val CONFIRM_WINDOW_MS = 800L
         private const val SCAN_INTERVAL_MS = 600L
+        private const val RIDE_WINDOW_MS = 3000L
         private const val OCR_FAST_MS = 600L
         private const val OCR_SLOW_MS = 1500L
         private const val OCR_DISPLAY_MS = 1500L
