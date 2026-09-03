@@ -50,6 +50,7 @@ class CalculatorService : AccessibilityService() {
     private var ocrConfirmAttempts = 0
     private var ocrEmptyStreak = 0
     private var staleOtherSince = 0L
+    private var lastNotified: ParsedCard? = null
 
     private fun dumpTexts(source: String, items: List<TextItem>) {
         val now = System.currentTimeMillis()
@@ -499,6 +500,10 @@ class CalculatorService : AccessibilityService() {
                 }
                 if (disp.passenger == null && card.passenger != null) {
                     refreshPassenger(card)
+                } else if (disp.pickup == null && card.pickup != null) {
+                    refreshAddresses(card)
+                } else if (disp.dropoff == null && card.dropoff != null) {
+                    refreshAddresses(card)
                 } else {
                     DriveWinLog.log(
                         "calc",
@@ -534,7 +539,16 @@ class CalculatorService : AccessibilityService() {
         }
     }
 
-    private fun displayIfNew(card: ParsedCard, isUber: Boolean) {
+    private fun displayIfNew(cardIn: ParsedCard, isUber: Boolean) {
+        var card = cardIn
+        if (card.pickup == null || card.dropoff == null) {
+            rideAddressesNow()?.let { a ->
+                card = card.copy(
+                    pickup = card.pickup ?: a.pickup,
+                    dropoff = card.dropoff ?: a.dropoff
+                )
+            }
+        }
         if (!Validator.isValid(card.data)) {
             DriveWinLog.log(
                 "calc",
@@ -551,6 +565,8 @@ class CalculatorService : AccessibilityService() {
             return
         }
         lastHash = hash
+        val isNewRide = lastNotified == null || !similar(lastNotified!!, card)
+        lastNotified = card
         shownCard = card
         shownIsUber = isUber
         lastShownMs = System.currentTimeMillis()
@@ -568,21 +584,11 @@ class CalculatorService : AccessibilityService() {
         setState(State.DISPLAYING)
         DriveWinLog.log(
             "calc",
-            "MOSTRANDO CARD: $app R\$${data.fare} ${data.totalDistanceKm}km ${data.totalTimeMin}min"
+            "MOSTRANDO CARD: $app R\$${data.fare} ${data.totalDistanceKm}km ${data.totalTimeMin}min" +
+                (if (card.pickup != null) " EMB:${card.pickup}" else "") +
+                (if (card.dropoff != null) " DESC:${card.dropoff}" else "")
         )
-        OverlayManager.show(
-            this,
-            OverlayManager.OverlayContent(
-                data,
-                res,
-                app,
-                card.suspicious,
-                card.confidence,
-                passenger = card.passenger
-            ),
-            beep = prefs.overlayAlert,
-            hold = true
-        )
+        updateOverlayFromShown(prefs.overlayAlert)
         AppState.updateOverlayVisible(true)
 
         prefs.lastOffer = buildString {
@@ -609,6 +615,115 @@ class CalculatorService : AccessibilityService() {
             "offer $app fare=${data.fare} km=${data.totalDistanceKm} min=${data.totalTimeMin} " +
                 "rkm=${"%.2f".format(res.perKm)} rh=${"%.2f".format(res.perHour)} nota=${res.score} ${res.level}"
         )
+        if (isNewRide) {
+            rideArrived(card, res, app, prefs)
+        }
+    }
+
+    private fun updateOverlayFromShown(beep: Boolean) {
+        val cur = shownCard ?: return
+        val prefs = Prefs(this)
+        val res = Calculator.calculate(cur.data, prefs.minPerKm, prefs.minPerHour)
+        val app = if (shownIsUber) "Uber" else "99"
+        OverlayManager.show(
+            this,
+            OverlayManager.OverlayContent(
+                cur.data,
+                res,
+                app,
+                cur.suspicious,
+                cur.confidence,
+                passenger = cur.passenger,
+                pickup = cur.pickup,
+                dropoff = cur.dropoff
+            ),
+            beep = beep,
+            hold = true
+        )
+    }
+
+    private fun rideAddressesNow(): RideAddresses? {
+        return try {
+            val (_, root) = rideWindowPackageAndRoot()
+            if (root == null) return null
+            val all = collect(root)
+            if (all.isEmpty()) return null
+            val screenH = all.maxOf { it.bounds.bottom }
+            val items = all.filter { inBottomRegion(it.bounds, screenH) }
+            AddressFinder.extract(items)
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    private fun rideArrived(card: ParsedCard, res: CalcResult, app: String, prefs: Prefs) {
+        if (prefs.cardNotify) {
+            try {
+                RidePrints.postCardNotification(
+                    this, app, card.data, res, card.passenger, card.pickup, card.dropoff
+                )
+            } catch (e: Exception) {
+                DriveWinLog.log("calc", "erro ao notificar corrida: ${e.message}")
+            }
+        }
+        if (prefs.printAuto) {
+            capturePrintToGallery(card, app)
+        }
+    }
+
+    private fun capturePrintToGallery(card: ParsedCard, app: String) {
+        val ctx = applicationContext
+        fun done(saved: Boolean) {
+            DriveWinLog.log("calc", "print da corrida ${if (saved) "salvo na galeria" else "falhou"}")
+        }
+        if (Build.VERSION.SDK_INT >= 30) {
+            try {
+                val ex = shotExecutor ?: HandlerThread("DriveWinShot").also { it.start() }
+                    .let { st -> Executor { r -> Handler(st.looper).post(r) } }
+                    .also { shotExecutor = it }
+                takeScreenshot(Display.DEFAULT_DISPLAY, ex, object : TakeScreenshotCallback {
+                    override fun onSuccess(screenshot: ScreenshotResult) {
+                        val hb = screenshot.hardwareBuffer
+                        val bmp = try {
+                            val wrapped = if (Build.VERSION.SDK_INT >= 31) {
+                                Bitmap.wrapHardwareBuffer(hb, screenshot.colorSpace)
+                            } else {
+                                Bitmap.wrapHardwareBuffer(hb, null)
+                            }
+                            wrapped?.copy(Bitmap.Config.ARGB_8888, false)
+                        } catch (e: Exception) {
+                            null
+                        } finally {
+                            hb.close()
+                        }
+                        if (bmp == null) {
+                            done(false)
+                            return
+                        }
+                        val ok = RidePrints.saveToGallery(ctx, bmp, "${app}_${card.data.fare}")
+                        bmp.recycle()
+                        done(ok)
+                    }
+
+                    override fun onFailure(errorCode: Int) {
+                        done(false)
+                    }
+                })
+            } catch (e: Exception) {
+                DriveWinLog.log("calc", "erro no print via acessibilidade: ${e.message}")
+            }
+        } else {
+            val started = OcrFallback.captureFullBitmap(this) { bmp ->
+                if (bmp == null) {
+                    done(false)
+                    return@captureFullBitmap
+                }
+                val ok = RidePrints.saveToGallery(ctx, bmp, "${app}_${card.data.fare}")
+                if (!bmp.isRecycled) bmp.recycle()
+                done(ok)
+            }
+            if (!started) done(false)
+        }
     }
 
     private fun similar(a: ParsedCard, b: ParsedCard): Boolean {
@@ -650,29 +765,27 @@ class CalculatorService : AccessibilityService() {
         ocrConfirmAttempts = 0
         ocrEmptyStreak = 0
         staleOtherSince = 0L
+        lastNotified = null
     }
 
     private fun refreshPassenger(card: ParsedCard) {
+        refreshCardDetails(card, "PASSAGEIRO detectado em leitura seguinte")
+    }
+
+    private fun refreshAddresses(card: ParsedCard) {
+        refreshCardDetails(card, "ENDERECOS lidos em leitura seguinte")
+    }
+
+    private fun refreshCardDetails(card: ParsedCard, why: String) {
         val old = shownCard ?: return
-        if (old.passenger != null || card.passenger == null) return
-        shownCard = old.copy(passenger = card.passenger)
-        val prefs = Prefs(this)
-        val res = Calculator.calculate(old.data, prefs.minPerKm, prefs.minPerHour)
-        val app = if (shownIsUber) "Uber" else "99"
-        DriveWinLog.log("calc", "PASSAGEIRO detectado em leitura seguinte - atualizando card (${card.passenger})")
-        OverlayManager.show(
-            this,
-            OverlayManager.OverlayContent(
-                old.data,
-                res,
-                app,
-                old.suspicious,
-                old.confidence,
-                passenger = card.passenger
-            ),
-            beep = false,
-            hold = true
-        )
+        var np = old
+        if (old.passenger == null && card.passenger != null) np = np.copy(passenger = card.passenger)
+        if (np.pickup == null && card.pickup != null) np = np.copy(pickup = card.pickup)
+        if (np.dropoff == null && card.dropoff != null) np = np.copy(dropoff = card.dropoff)
+        if (np === old) return
+        shownCard = np
+        DriveWinLog.log("calc", "$why - atualizando card")
+        updateOverlayFromShown(false)
     }
 
     private fun setState(s: State) {

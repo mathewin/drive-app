@@ -1,14 +1,19 @@
 package com.example.calculadoraganhos
 
 import android.content.Context
+import android.content.Intent
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.media.AudioManager
 import android.media.ToneGenerator
+import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import android.os.VibrationEffect
 import android.os.Vibrator
+import android.text.SpannableString
+import android.text.style.ForegroundColorSpan
+import android.text.style.StyleSpan
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.MotionEvent
@@ -27,7 +32,9 @@ object OverlayManager {
         val app: String,
         val suspicious: Boolean,
         val confidence: Double,
-        val passenger: String? = null
+        val passenger: String? = null,
+        val pickup: String? = null,
+        val dropoff: String? = null
     )
 
     private val COLOR_BG = 0xFF0E0F12.toInt()
@@ -231,6 +238,19 @@ object OverlayManager {
             )
         }
 
+        c.pickup?.let { addr ->
+            root.addView(
+                addressBlock(ctx, "EMBARQUE", addr, COLOR_VERDE, scale),
+                paramsTop(dp(6))
+            )
+        }
+        c.dropoff?.let { addr ->
+            root.addView(
+                addressBlock(ctx, "DESEMBARQUE", addr, COLOR_ROSA, scale),
+                paramsTop(dp(2))
+            )
+        }
+
         if (c.suspicious) {
             root.addView(
                 text(ctx, "Dados suspeitos", 11 * scale, COLOR_VERMELHO, true),
@@ -241,6 +261,37 @@ object OverlayManager {
         try {
             wm?.updateViewLayout(root, params)
         } catch (_: Exception) {
+        }
+    }
+
+    private fun addressBlock(ctx: Context, kind: String, addr: String, color: Int, scale: Float): TextView {
+        val label = "$kind\n"
+        val sp = SpannableString(label + addr)
+        sp.setSpan(StyleSpan(Typeface.BOLD), 0, label.length, 0)
+        sp.setSpan(ForegroundColorSpan(color), 0, label.length, 0)
+        val tv = text(ctx, "", 12 * scale, COLOR_BRANCO, false).apply {
+            text = sp
+            setLineSpacing(0f, 1f)
+            isClickable = true
+            setOnClickListener { openMaps(context, addr) }
+        }
+        val screenW = ctx.resources.displayMetrics.widthPixels
+        val startX = params?.x ?: 0
+        val maxW = (screenW - startX - dp(16)).coerceIn(dp(150), dp(360))
+        tv.setMaxWidth(maxW)
+        return tv
+    }
+
+    private fun openMaps(ctx: Context, addr: String) {
+        try {
+            val i = Intent(
+                Intent.ACTION_VIEW,
+                Uri.parse("geo:0,0?q=" + Uri.encode(addr))
+            ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            ctx.startActivity(i)
+            DriveWinLog.log("ovl", "abrindo mapa para: $addr")
+        } catch (t: Throwable) {
+            DriveWinLog.log("ovl", "erro ao abrir mapa: ${t.message}")
         }
     }
 

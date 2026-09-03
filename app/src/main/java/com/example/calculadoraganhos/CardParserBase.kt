@@ -16,10 +16,13 @@ abstract class CardParserBase {
         val (pickupMin, tripMin, totalMin) = parseTimes(items)
         val data = RideData(fare, pickupKm, tripKm, totalKm, pickupMin, tripMin, totalMin)
         if (data.totalDistanceKm <= 0 && data.totalTimeMin <= 0) return null
+        val addr = AddressFinder.extract(items)
         return ParsedCard(
             data,
             suspicious = Validator.suspicious(data),
-            passenger = ParsingUtils.passengerRating(texts)
+            passenger = ParsingUtils.passengerRating(texts),
+            pickup = addr.pickup,
+            dropoff = addr.dropoff
         )
     }
 

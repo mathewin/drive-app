@@ -76,7 +76,9 @@ fun DriveWinApp(
     startMonitor: () -> Unit,
     stopMonitor: () -> Unit,
     testOverlay: () -> Unit,
-    requestCapture: () -> Unit
+    requestCapture: () -> Unit,
+    requestNotif: () -> Unit,
+    requestStorage: () -> Unit
 ) {
     var tab by remember { mutableIntStateOf(0) }
 
@@ -110,7 +112,12 @@ fun DriveWinApp(
                 Modifier.padding(padding),
                 openA11y, openOverlay, openBattery, startMonitor, stopMonitor, testOverlay
             )
-            1 -> MetasScreen(Modifier.padding(padding), requestCapture)
+            1 -> MetasScreen(
+                Modifier.padding(padding),
+                requestCapture,
+                requestNotif,
+                requestStorage
+            )
             else -> HistoryScreen(Modifier.padding(padding))
         }
     }
@@ -393,7 +400,12 @@ private fun PermRow(label: String, status: String, ok: Boolean, onClick: () -> U
 }
 
 @Composable
-private fun MetasScreen(modifier: Modifier = Modifier, requestCapture: () -> Unit) {
+private fun MetasScreen(
+    modifier: Modifier = Modifier,
+    requestCapture: () -> Unit,
+    requestNotif: () -> Unit,
+    requestStorage: () -> Unit
+) {
     val ctx = LocalContext.current
     val prefs = remember { Prefs(ctx) }
 
@@ -500,6 +512,22 @@ private fun MetasScreen(modifier: Modifier = Modifier, requestCapture: () -> Uni
                 "Screenshot via acessibilidade: OK (sem dialogo)",
                 color = MaterialTheme.colorScheme.secondary, fontSize = 11.sp
             )
+        }
+        Spacer(Modifier.height(24.dp))
+        Text("PRINTS E CARD NA BARRA", color = MaterialTheme.colorScheme.secondary, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(4.dp))
+        Text(
+            "Salva na galeria a tela de cada corrida nova (pasta Pictures/DriveWin) e mostra um card silencioso, que aparece so ao descer a barra de notificacoes.",
+            color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp
+        )
+        Spacer(Modifier.height(4.dp))
+        ToggleRow("Salvar print automatico na galeria", prefs.printAuto) {
+            prefs.printAuto = it
+            if (it) requestStorage()
+        }
+        ToggleRow("Card na barra ao ler corrida", prefs.cardNotify) {
+            prefs.cardNotify = it
+            if (it) requestNotif()
         }
         Spacer(Modifier.height(24.dp))
         Text("TEMA DO APP", color = MaterialTheme.colorScheme.secondary, fontSize = 13.sp, fontWeight = FontWeight.Bold)

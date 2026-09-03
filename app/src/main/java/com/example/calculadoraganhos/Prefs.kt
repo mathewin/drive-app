@@ -61,6 +61,14 @@ class Prefs(context: Context) {
         get() = sp.getBoolean("ocr_enabled", true)
         set(v) = sp.edit().putBoolean("ocr_enabled", v).apply()
 
+    var printAuto: Boolean
+        get() = sp.getBoolean("print_auto", false)
+        set(v) = sp.edit().putBoolean("print_auto", v).apply()
+
+    var cardNotify: Boolean
+        get() = sp.getBoolean("card_notify", true)
+        set(v) = sp.edit().putBoolean("card_notify", v).apply()
+
     var lastOffer: String?
         get() = sp.getString("last_offer", null)
         set(v) = sp.edit().putString("last_offer", v).apply()

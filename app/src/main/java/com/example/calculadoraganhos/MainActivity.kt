@@ -32,6 +32,34 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private val notifPermLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { }
+
+    private val storagePermLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { }
+
+    private fun ensureNotifPerm() {
+        if (Build.VERSION.SDK_INT >= 33) {
+            if (checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS)
+                != android.content.pm.PackageManager.PERMISSION_GRANTED
+            ) {
+                notifPermLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }
+    }
+
+    private fun ensureStoragePerm() {
+        if (Build.VERSION.SDK_INT <= 28) {
+            if (checkSelfPermission(android.Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                != android.content.pm.PackageManager.PERMISSION_GRANTED
+            ) {
+                storagePermLauncher.launch(android.Manifest.permission.WRITE_EXTERNAL_STORAGE)
+            }
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         AppTheme.dark = Prefs(this).darkMode
@@ -82,7 +110,9 @@ class MainActivity : ComponentActivity() {
                     startMonitor = { toggleMonitor(true) },
                     stopMonitor = { toggleMonitor(false) },
                     testOverlay = { testOverlay() },
-                    requestCapture = { requestCapture() }
+                    requestCapture = { requestCapture() },
+                    requestNotif = { ensureNotifPerm() },
+                    requestStorage = { ensureStoragePerm() }
                 )
             }
         }

@@ -41,7 +41,9 @@ data class ParsedCard(
     val confidence: Double = 1.0,
     val suspicious: Boolean = false,
     val confirmed: Boolean = false,
-    val passenger: String? = null
+    val passenger: String? = null,
+    val pickup: String? = null,
+    val dropoff: String? = null
 )
 
 object ParsingUtils {

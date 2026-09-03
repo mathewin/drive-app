@@ -113,6 +113,87 @@ object OcrFallback {
         }
     }
 
+    fun captureFullBitmap(
+        context: Context,
+        onBitmap: (Bitmap?) -> Unit
+    ): Boolean {
+        val projection = mediaProjection
+        if (projection == null) {
+            hint("print da corrida exige captura manual autorizada")
+            return false
+        }
+        return try {
+            if (thread == null) {
+                thread = HandlerThread("DriveWinOCR").also { it.start() }
+                handler = Handler(thread!!.looper)
+            }
+            val h = handler ?: return false
+            val wm = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
+            val b = wm.currentWindowMetrics.bounds
+            val width = b.width()
+            val height = b.height()
+            val dpi = context.resources.displayMetrics.densityDpi
+
+            val reader = ImageReader.newInstance(width, height, PixelFormat.RGBA_8888, 2)
+            var vd: VirtualDisplay? = null
+            var cleaned = false
+
+            fun cleanup() {
+                if (cleaned) return
+                cleaned = true
+                try {
+                    vd?.release()
+                } catch (_: Exception) {
+                }
+                try {
+                    reader.close()
+                } catch (_: Exception) {
+                }
+            }
+
+            vd = projection.createVirtualDisplay(
+                "DriveWinPrint", width, height, dpi,
+                DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR, reader.surface, null, h
+            )
+
+            h.postDelayed({
+                val image = try {
+                    reader.acquireLatestImage()
+                } catch (_: Exception) {
+                    null
+                }
+                if (image == null) {
+                    cleanup()
+                    onBitmap(null)
+                    return@postDelayed
+                }
+                val plane = image.planes[0]
+                val pixelStride = plane.pixelStride
+                val rowPadding = plane.rowStride - pixelStride * width
+                val bitmap = Bitmap.createBitmap(
+                    width + rowPadding / pixelStride, height, Bitmap.Config.ARGB_8888
+                )
+                bitmap.copyPixelsFromBuffer(plane.buffer)
+                image.close()
+                val finalBmp = if (rowPadding > 0) {
+                    Bitmap.createBitmap(bitmap, 0, 0, width, height)
+                } else {
+                    bitmap
+                }
+                cleanup()
+                onBitmap(finalBmp)
+            }, 180)
+            true
+        } catch (e: Exception) {
+            Log.w(TAG, "print capture fail: ${e.message}")
+            try {
+                if (e is SecurityException) mediaProjection?.stop()
+            } catch (_: Exception) {
+            }
+            false
+        }
+    }
+
     fun tryCaptureAndParse(
         context: Context,
         parser: (List<TextItem>) -> ParsedCard?,
