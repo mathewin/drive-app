@@ -101,6 +101,12 @@ fun DriveWinApp(
                     label = { Text("Historico") },
                     icon = { Text(if (tab == 2) "\u25C9" else "\u25CB") }
                 )
+                NavigationBarItem(
+                    selected = tab == 3,
+                    onClick = { tab = 3 },
+                    label = { Text("Motorista") },
+                    icon = { Text(if (tab == 3) "\u25C9" else "\u25CB") }
+                )
             }
         }
     ) { padding ->
@@ -117,7 +123,8 @@ fun DriveWinApp(
                 requestStorage,
                 testNotif
             )
-            else -> HistoryScreen(Modifier.padding(padding))
+            2 -> HistoryScreen(Modifier.padding(padding))
+            else -> MotoristaScreen(Modifier.padding(padding))
         }
     }
 }
