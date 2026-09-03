@@ -26,7 +26,8 @@ object OverlayManager {
         val result: CalcResult,
         val app: String,
         val suspicious: Boolean,
-        val confidence: Double
+        val confidence: Double,
+        val passenger: String? = null
     )
 
     private val COLOR_BG = 0xFF0E0F12.toInt()
@@ -179,10 +180,19 @@ object OverlayManager {
             text(ctx, "${ParsingUtils.formatMoney(c.result.perHour)}/h", 14 * scale, COLOR_CINZA, false),
             paramsTop(dp(2))
         )
-        root.addView(
-            text(ctx, "NOTA ${c.result.score}/100", 12 * scale, levelColor, true),
-            paramsTop(dp(2))
-        )
+        val passenger = c.passenger?.takeIf { it.isNotBlank() }
+        if (prefs.showScore || passenger != null) {
+            root.addView(
+                text(
+                    ctx,
+                    if (passenger != null) "PASSAGEIRO  $passenger" else "NOTA ${c.result.score}/100",
+                    12 * scale,
+                    if (passenger != null) COLOR_ROSA else levelColor,
+                    true
+                ),
+                paramsTop(dp(2))
+            )
+        }
 
         if (expanded) {
             root.addView(text(ctx, "Valor  ${ParsingUtils.formatMoney(c.data.fare)}", 11 * scale, COLOR_BRANCO, false), paramsTop(dp(6)))

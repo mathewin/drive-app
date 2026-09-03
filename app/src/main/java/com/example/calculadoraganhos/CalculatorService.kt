@@ -233,7 +233,14 @@ class CalculatorService : AccessibilityService() {
         )
         OverlayManager.show(
             this,
-            OverlayManager.OverlayContent(data, res, app, card.suspicious, card.confidence),
+            OverlayManager.OverlayContent(
+                data,
+                res,
+                app,
+                card.suspicious,
+                card.confidence,
+                passenger = card.passenger
+            ),
             beep = prefs.overlayAlert
         )
         AppState.updateOverlayVisible(true)

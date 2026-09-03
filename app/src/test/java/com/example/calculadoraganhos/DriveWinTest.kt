@@ -3,6 +3,7 @@ package com.example.calculadoraganhos
 import android.graphics.Rect
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -90,5 +91,31 @@ class DriveWinTest {
         assertEquals(10.0, card!!.data.totalDistanceKm, 0.001)
         assertEquals(2.0, card.data.pickupKm, 0.001)
         assertEquals(8.0, card.data.tripKm, 0.001)
+    }
+
+    @Test
+    fun passengerRatingCombinedToken() {
+        assertEquals(
+            "5,00",
+            ParsingUtils.passengerRating(listOf("5,00(32)", "Verificado"))
+        )
+        assertEquals(
+            "4,98",
+            ParsingUtils.passengerRating(listOf("4.98(1254)", "Verificado"))
+        )
+    }
+
+    @Test
+    fun passengerRatingSplitTokens() {
+        assertEquals(
+            "4,9",
+            ParsingUtils.passengerRating(listOf("R\$ 15,09", "4,9", "(237)", "Verificado"))
+        )
+    }
+
+    @Test
+    fun passengerRatingRejectsPlainNumbers() {
+        assertNull(ParsingUtils.passengerRating(listOf("R\$ 15,09", "4,9", "6.3 km")))
+        assertNull(ParsingUtils.passengerRating(listOf("15,09", "3,50", "1,93/km")))
     }
 }

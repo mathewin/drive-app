@@ -16,7 +16,11 @@ abstract class CardParserBase {
         val (pickupMin, tripMin, totalMin) = parseTimes(items)
         val data = RideData(fare, pickupKm, tripKm, totalKm, pickupMin, tripMin, totalMin)
         if (data.totalDistanceKm <= 0 && data.totalTimeMin <= 0) return null
-        return ParsedCard(data, suspicious = Validator.suspicious(data))
+        return ParsedCard(
+            data,
+            suspicious = Validator.suspicious(data),
+            passenger = ParsingUtils.passengerRating(texts)
+        )
     }
 
     private fun parseFare(texts: List<String>): Double? {

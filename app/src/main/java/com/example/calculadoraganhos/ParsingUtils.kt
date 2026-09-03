@@ -33,7 +33,8 @@ data class ParsedCard(
     val data: RideData,
     val confidence: Double = 1.0,
     val suspicious: Boolean = false,
-    val confirmed: Boolean = false
+    val confirmed: Boolean = false,
+    val passenger: String? = null
 )
 
 object ParsingUtils {
@@ -49,6 +50,9 @@ object ParsingUtils {
     private val RE_HM = Regex("([0-9]{1,2})h\\s*(?:([0-9]{1,2})(?:m(?:in)?)?)?", RegexOption.IGNORE_CASE)
     private val RE_MIN = Regex("([0-9]{1,3})\\s*(?:min(?:uto)?s?)", RegexOption.IGNORE_CASE)
     private val RE_HOUR = Regex("([0-9]{1,2})\\s*h(?:oras?)?(?!\\w)", RegexOption.IGNORE_CASE)
+    private val RE_RATING_TRIPS = Regex("""(\d[.,]\d{1,2})\s*\(\s*\d+\s*\)""")
+    private val RE_RATING = Regex("""^\s*(\d[.,]\d{1,2})\s*$""")
+    private val RE_TRIPS_ONLY = Regex("""\(\s*\d+\s*\)""")
 
     private val MONEY = java.text.NumberFormat.getCurrencyInstance(Locale("pt", "BR"))
 
@@ -61,6 +65,33 @@ object ParsingUtils {
         val h = m / 60
         val rest = m % 60
         return if (h > 0) "${h}h${rest}min" else "${m}min"
+    }
+
+    private fun ratingValue(s: String): Double? {
+        val v = toDouble(s.trim()) ?: return null
+        return if (v in 3.0..5.2) v else null
+    }
+
+    private fun normRating(s: String): String = s.trim().replace('.', ',')
+
+    fun passengerRating(texts: List<String>): String? {
+        var plain: String? = null
+        for (t in texts) {
+            val combined = RE_RATING_TRIPS.find(t)
+            if (combined != null) {
+                val v = ratingValue(combined.groupValues[1])
+                if (v != null) return normRating(combined.groupValues[1])
+            }
+            val m = RE_RATING.find(t)
+            if (m != null) {
+                val v = ratingValue(m.groupValues[1])
+                if (v != null && plain == null) plain = normRating(m.groupValues[1])
+            }
+        }
+        if (plain == null) return null
+        val hasTrips = texts.any { RE_TRIPS_ONLY.matches(it.trim()) }
+        val hasVerified = texts.any { it.contains("verificad", true) }
+        return if (hasTrips || hasVerified) plain else null
     }
 
     fun moneyValues(texts: List<String>): List<Double> {
