@@ -78,7 +78,8 @@ fun DriveWinApp(
     testOverlay: () -> Unit,
     requestCapture: () -> Unit,
     requestNotif: () -> Unit,
-    requestStorage: () -> Unit
+    requestStorage: () -> Unit,
+    testNotif: () -> Unit
 ) {
     var tab by remember { mutableIntStateOf(0) }
 
@@ -116,7 +117,8 @@ fun DriveWinApp(
                 Modifier.padding(padding),
                 requestCapture,
                 requestNotif,
-                requestStorage
+                requestStorage,
+                testNotif
             )
             else -> HistoryScreen(Modifier.padding(padding))
         }
@@ -404,7 +406,8 @@ private fun MetasScreen(
     modifier: Modifier = Modifier,
     requestCapture: () -> Unit,
     requestNotif: () -> Unit,
-    requestStorage: () -> Unit
+    requestStorage: () -> Unit,
+    testNotif: () -> Unit
 ) {
     val ctx = LocalContext.current
     val prefs = remember { Prefs(ctx) }
@@ -530,6 +533,22 @@ private fun MetasScreen(
             prefs.cardNotify = it
             if (it) requestNotif()
         }
+        Spacer(Modifier.height(8.dp))
+        Button(
+            onClick = testNotif,
+            modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                contentColor = MaterialTheme.colorScheme.secondary
+            )
+        ) {
+            Text("Testar card na barra de notificacoes")
+        }
+        Spacer(Modifier.height(4.dp))
+        Text(
+            "Envia agora um card de exemplo. Desca a aba de notificacoes para conferir.",
+            color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp
+        )
         Spacer(Modifier.height(24.dp))
         Text("TEMA DO APP", color = MaterialTheme.colorScheme.secondary, fontSize = 13.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(8.dp))

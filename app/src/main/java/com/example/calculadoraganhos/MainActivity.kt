@@ -32,9 +32,17 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private var postSampleOnGrant = false
+
     private val notifPermLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
-    ) { }
+    ) { granted ->
+        if (granted && postSampleOnGrant) {
+            postSampleOnGrant = false
+            showSampleCard()
+        }
+        postSampleOnGrant = false
+    }
 
     private val storagePermLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -47,6 +55,40 @@ class MainActivity : ComponentActivity() {
             ) {
                 notifPermLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
             }
+        }
+    }
+
+    private fun testNotifCard() {
+        if (Build.VERSION.SDK_INT >= 33) {
+            if (checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS)
+                != android.content.pm.PackageManager.PERMISSION_GRANTED
+            ) {
+                postSampleOnGrant = true
+                notifPermLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                return
+            }
+        }
+        showSampleCard()
+    }
+
+    private fun showSampleCard() {
+        try {
+            val prefs = Prefs(this)
+            val data = RideData(fare = 25.5, totalKm = 18.2, totalMin = 25.0)
+            val res = Calculator.calculate(data, prefs.minPerKm, prefs.minPerHour)
+            RidePrints.postCardNotification(
+                this,
+                "Uber",
+                data,
+                res,
+                passenger = "4.98",
+                pickup = "Nova Brasilia, Jardim Esmeraldas",
+                dropoff = "Padaria Santa Luzia, Avenida Santa Cruz"
+            )
+            DriveWinLog.log("app", "card de teste enviado para a barra de notificacoes")
+            toast("Card de teste na barra - desca a aba de notificacoes")
+        } catch (e: Exception) {
+            toast("Falha ao testar o card: ${e.message}")
         }
     }
 
@@ -112,7 +154,8 @@ class MainActivity : ComponentActivity() {
                     testOverlay = { testOverlay() },
                     requestCapture = { requestCapture() },
                     requestNotif = { ensureNotifPerm() },
-                    requestStorage = { ensureStoragePerm() }
+                    requestStorage = { ensureStoragePerm() },
+                    testNotif = { testNotifCard() }
                 )
             }
         }
@@ -145,6 +188,8 @@ class MainActivity : ComponentActivity() {
             }
             Prefs(this).monitorOn = true
             DriveWinLog.log("app", "LIGADO - leitura ativa (OCR sem dialogo, via acessibilidade)")
+            ensureNotifPerm()
+            if (Prefs(this).printAuto) ensureStoragePerm()
             RideForegroundService.start(this)
             toast("Monitoramento LIGADO - abra a Uber ou a 99")
         } else {
