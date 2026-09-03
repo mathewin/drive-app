@@ -42,7 +42,7 @@ class CalculatorService : AccessibilityService() {
     private var offerAbsentSince = 0L
     private var rideGoneSince = 0L
     private var lastOcrNudgeMs = 0L
-    private var dismissedKey: String? = null
+    private var dismissedCard: ParsedCard? = null
 
     private fun dumpTexts(source: String, items: List<TextItem>) {
         val now = System.currentTimeMillis()
@@ -166,8 +166,14 @@ class CalculatorService : AccessibilityService() {
         OverlayManager.onCardClosed = {
             stableOcr = null
             stableOcrMs = 0L
-            if (scanSig.isNotEmpty()) dismissedKey = scanSig
-            DriveWinLog.log("calc", "card fechado (toque ou tempo) - esta oferta nao reaparece ate sumir da tela")
+            val cur = shownCard
+            if (cur != null) {
+                dismissedCard = cur
+            }
+            DriveWinLog.log(
+                "calc",
+                "card fechado pelo toque - esta oferta nao reaparece enquanto estiver na tela"
+            )
         }
     }
 
@@ -304,14 +310,6 @@ class CalculatorService : AccessibilityService() {
                 .sorted()
                 .forEach { append(it).append(',') }
         }
-        val dismissed = dismissedKey
-        if (dismissed != null) {
-            if (sig == dismissed) {
-                scanSig = sig
-                return false
-            }
-            dismissedKey = null
-        }
         if (sig == scanSig) return false
         scanSig = sig
         lastOfferish = true
@@ -393,6 +391,15 @@ class CalculatorService : AccessibilityService() {
 
     private fun handleCard(card: ParsedCard, isUber: Boolean, now: Long) {
         val nowMs = if (now > 0L) now else System.currentTimeMillis()
+        val dis = dismissedCard
+        if (dis != null && similar(dis, card)) {
+            DriveWinLog.log(
+                "calc",
+                "oferta fechada pelo toque ainda na tela - sem releitura " +
+                    "fare=${card.data.fare} km=${card.data.totalDistanceKm} min=${card.data.totalTimeMin}"
+            )
+            return
+        }
         val disp = shownCard
         if (disp != null && similar(disp, card)) {
             val cardStillUp = OverlayManager.isVisible() || (nowMs - lastShownMs < holdMs())
@@ -410,6 +417,7 @@ class CalculatorService : AccessibilityService() {
                 return
             }
         }
+        if (dis != null) dismissedCard = null
         if (card.confidence >= 1.0) {
             displayIfNew(card, isUber)
             return
@@ -476,7 +484,8 @@ class CalculatorService : AccessibilityService() {
                 card.confidence,
                 passenger = card.passenger
             ),
-            beep = prefs.overlayAlert
+            beep = prefs.overlayAlert,
+            hold = true
         )
         AppState.updateOverlayVisible(true)
 
@@ -528,7 +537,7 @@ class CalculatorService : AccessibilityService() {
         stableOcr = null
         stableOcrMs = 0L
         scanSig = ""
-        dismissedKey = null
+        dismissedCard = null
         offerAbsentSince = 0L
     }
 
@@ -550,7 +559,8 @@ class CalculatorService : AccessibilityService() {
                 old.confidence,
                 passenger = card.passenger
             ),
-            beep = false
+            beep = false,
+            hold = true
         )
     }
 
@@ -586,7 +596,7 @@ class CalculatorService : AccessibilityService() {
         private const val TAG = "DriveWin"
         private const val OCR_CONFIRM_MIN_MS = 400L
         private const val SCAN_INTERVAL_MS = 300L
-        private const val OFFER_ABSENT_CONFIRM_MS = 700L
+        private const val OFFER_ABSENT_CONFIRM_MS = 2500L
         private const val RIDE_FALLBACK_MS = 6000L
         private const val RIDE_GONE_CONFIRM_MS = 2000L
         private const val OCR_FAST_MS = 600L

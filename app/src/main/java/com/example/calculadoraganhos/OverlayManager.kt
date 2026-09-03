@@ -60,13 +60,13 @@ object OverlayManager {
         }
     }
 
-    fun show(context: Context, c: OverlayContent, beep: Boolean) {
+    fun show(context: Context, c: OverlayContent, beep: Boolean, hold: Boolean = false) {
         runOnMain {
-            showOnMain(context.applicationContext, c, beep)
+            showOnMain(context.applicationContext, c, beep, hold)
         }
     }
 
-    private fun showOnMain(ctx: Context, c: OverlayContent, beep: Boolean) {
+    private fun showOnMain(ctx: Context, c: OverlayContent, beep: Boolean, hold: Boolean) {
         try {
             density = ctx.resources.displayMetrics.density
             content = c
@@ -91,7 +91,7 @@ object OverlayManager {
             AppState.updateOverlayVisible(true)
             if (beep) beepAndVibrate(ctx)
             animateIn(fresh)
-            scheduleHide(ctx)
+            if (!hold) scheduleHide(ctx)
             DriveWinLog.log(
                 "ovl",
                 "card atualizado: ${c.app} ${c.data.fare}km=${c.data.totalDistanceKm} min=${c.data.totalTimeMin}"
