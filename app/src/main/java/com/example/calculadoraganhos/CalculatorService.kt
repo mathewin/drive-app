@@ -27,6 +27,8 @@ class CalculatorService : AccessibilityService() {
     private var lastCtxTag = ""
     private var lastCtxMs = 0L
     private var lastDumpMs = 0L
+    private var ocrCooldownMs = OCR_SLOW_MS
+    private var lastTextSig = ""
 
     private fun logCtx(pkg: String, isUber: Boolean, msg: String) {
         val now = System.currentTimeMillis()
@@ -54,7 +56,7 @@ class CalculatorService : AccessibilityService() {
 
     private fun tryOcr(parser: CardParserBase, isUber: Boolean) {
         val now = System.currentTimeMillis()
-        if (now - lastOcrTryMs < 6000) return
+        if (now - lastOcrTryMs < ocrCooldownMs) return
         lastOcrTryMs = now
         DriveWinLog.log("calc", "OCR: lendo a tela por imagem (acessibilidade)")
         if (Build.VERSION.SDK_INT >= 30) {
@@ -86,6 +88,8 @@ class CalculatorService : AccessibilityService() {
                             if (card != null) {
                                 DriveWinLog.log("calc", "OCR retornou card - validando")
                                 handleCard(card.copy(confidence = 0.6), isUber, System.currentTimeMillis())
+                            } else if (ocrCooldownMs == OCR_FAST_MS) {
+                                lastOcrTryMs = System.currentTimeMillis() - 400L
                             }
                         }
                     }
@@ -170,6 +174,21 @@ class CalculatorService : AccessibilityService() {
             if (items.isNotEmpty() && (hasMoney || hasKmOrMin)) dumpTexts("a11y", items)
         }
 
+        ocrCooldownMs = if (hasMoney || hasKmOrMin || hasWords) OCR_FAST_MS else OCR_SLOW_MS
+        val sig = buildString {
+            if (hasMoney || hasKmOrMin || hasWords) {
+                (ParsingUtils.moneyValues(texts) + ParsingUtils.kmValues(texts) +
+                    ParsingUtils.minutesValues(texts))
+                    .map { Math.round(it * 10) }
+                    .sorted()
+                    .forEach { append(it).append(',') }
+            }
+        }
+        if (sig.isNotEmpty() && sig != lastTextSig) {
+            DriveWinLog.log("calc", "nova composicao numerica na tela - OCR imediato")
+            lastOcrTryMs = 0L
+        }
+        lastTextSig = sig
         tryOcr(parser, isUber)
         setState(State.IDLE)
     }
@@ -251,6 +270,19 @@ class CalculatorService : AccessibilityService() {
             append(ParsingUtils.formatKm(data.totalDistanceKm)).append(" · ")
             append(ParsingUtils.formatMin(data.totalTimeMin))
         }
+        prefs.pushHistory(
+            listOf(
+                System.currentTimeMillis().toString(),
+                app,
+                "%.2f".format(data.fare),
+                "%.2f".format(data.totalDistanceKm),
+                "%.0f".format(data.totalTimeMin),
+                "%.2f".format(res.perKm),
+                "%.2f".format(res.perHour),
+                res.score.toString(),
+                card.passenger ?: ""
+            ).joinToString("|")
+        )
         Log.d(
             TAG,
             "offer $app fare=${data.fare} km=${data.totalDistanceKm} min=${data.totalTimeMin} " +
@@ -294,7 +326,9 @@ class CalculatorService : AccessibilityService() {
 
     companion object {
         private const val TAG = "DriveWin"
-        private const val DEBOUNCE_MS = 150L
+        private const val DEBOUNCE_MS = 100L
         private const val CONFIRM_WINDOW_MS = 800L
+        private const val OCR_FAST_MS = 1000L
+        private const val OCR_SLOW_MS = 5000L
     }
 }

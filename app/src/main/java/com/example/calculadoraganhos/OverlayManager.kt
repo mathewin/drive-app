@@ -43,7 +43,6 @@ object OverlayManager {
     private var view: LinearLayout? = null
     private var params: WindowManager.LayoutParams? = null
     private var content: OverlayContent? = null
-    private var expanded = false
     private var hideRunnable: Runnable? = null
     private var lastX = 0f
     private var lastY = 0f
@@ -68,7 +67,6 @@ object OverlayManager {
                 params = p
                 DriveWinLog.log("ovl", "card criado na tela (overlay ok)")
             }
-            expanded = false
             rebuild(ctx, c)
             AppState.updateOverlayVisible(true)
             if (beep) beepAndVibrate(ctx)
@@ -87,13 +85,6 @@ object OverlayManager {
         hideRunnable?.let { Handler(Looper.getMainLooper()).removeCallbacks(it) }
         hideRunnable = null
         cleanup()
-    }
-
-    fun toggleExpanded(context: Context) {
-        val c = content ?: return
-        val v = view ?: return
-        expanded = !expanded
-        rebuild(context.applicationContext, c)
     }
 
     private val overlayTouch = View.OnTouchListener { v, ev ->
@@ -128,7 +119,8 @@ object OverlayManager {
                     prefs.overlayPositionX = p.x
                     prefs.overlayPositionY = p.y
                 } else {
-                    toggleExpanded(v.context)
+                    DriveWinLog.log("ovl", "toque no card - fechando")
+                    hide()
                 }
                 true
             }
@@ -194,13 +186,11 @@ object OverlayManager {
             )
         }
 
-        if (expanded) {
-            root.addView(text(ctx, "Valor  ${ParsingUtils.formatMoney(c.data.fare)}", 11 * scale, COLOR_BRANCO, false), paramsTop(dp(6)))
-            root.addView(text(ctx, "Distancia  ${ParsingUtils.formatKm(c.result.totalKm)}", 11 * scale, COLOR_CINZA, false), paramsTop(dp(2)))
-            root.addView(text(ctx, "Tempo  ${ParsingUtils.formatMin(c.result.totalMin)}", 11 * scale, COLOR_CINZA, false), paramsTop(dp(2)))
-            if (c.suspicious) {
-                root.addView(text(ctx, "Dados suspeitos", 10 * scale, COLOR_VERMELHO, true), paramsTop(dp(6)))
-            }
+        if (c.suspicious) {
+            root.addView(
+                text(ctx, "Dados suspeitos", 10 * scale, COLOR_VERMELHO, true),
+                paramsTop(dp(4))
+            )
         }
 
         try {
@@ -233,7 +223,6 @@ object OverlayManager {
         view = null
         params = null
         content = null
-        expanded = false
         AppState.updateOverlayVisible(false)
         if (v != null) {
             try {

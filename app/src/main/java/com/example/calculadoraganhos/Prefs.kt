@@ -53,6 +53,10 @@ class Prefs(context: Context) {
         get() = sp.getBoolean("monitor_on", false)
         set(v) = sp.edit().putBoolean("monitor_on", v).apply()
 
+    var darkMode: Boolean
+        get() = sp.getBoolean("dark_mode", true)
+        set(v) = sp.edit().putBoolean("dark_mode", v).apply()
+
     var ocrEnabled: Boolean
         get() = sp.getBoolean("ocr_enabled", true)
         set(v) = sp.edit().putBoolean("ocr_enabled", v).apply()
@@ -60,4 +64,18 @@ class Prefs(context: Context) {
     var lastOffer: String?
         get() = sp.getString("last_offer", null)
         set(v) = sp.edit().putString("last_offer", v).apply()
+
+    fun pushHistory(entry: String) {
+        val list = history().toMutableList()
+        list.add(0, entry)
+        while (list.size > 30) list.removeAt(list.size - 1)
+        sp.edit().putString("history", list.joinToString("\n")).apply()
+    }
+
+    fun history(): List<String> =
+        (sp.getString("history", "") ?: "").split("\n").filter { it.isNotBlank() }
+
+    fun clearHistory() {
+        sp.edit().remove("history").apply()
+    }
 }
