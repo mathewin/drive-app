@@ -24,10 +24,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.DatePickerDialog
-import androidx.compose.material3.DateRangePicker
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -37,7 +34,6 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.rememberDateRangePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -67,7 +63,6 @@ import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
-import java.util.TimeZone
 
 @Composable
 fun DriveWinApp(
@@ -697,47 +692,14 @@ private fun HistoryScreen(modifier: Modifier = Modifier) {
         }
     }
     val entries = prefs.history()
-    val options = listOf("Hoje", "7 dias", "30 dias", "Personalizado")
-    var selIdx by remember { mutableIntStateOf(1) }
-    var customStart by remember { mutableStateOf<Long?>(null) }
-    var customEnd by remember { mutableStateOf<Long?>(null) }
-    var showRange by remember { mutableStateOf(false) }
-
-    val startMs = when (selIdx) {
-        0 -> startOfToday()
-        1 -> startOfToday() - 6L * DAY_MS
-        2 -> startOfToday() - 29L * DAY_MS
-        else -> customStart ?: 0L
-    }
-    val endMs = if (selIdx == 3) (customEnd ?: Long.MAX_VALUE) else Long.MAX_VALUE
+    val startMs = startOfToday()
     val filtered = entries.filter { raw ->
         val ts = raw.substringBefore('|').toLongOrNull()
-        ts == null || (ts in startMs..endMs)
+        ts != null && ts >= startMs
     }
     val total = filtered.sumOf { raw ->
         val f = raw.split("|")
-        if (f.size >= 3) f[2].toDoubleOrNull() ?: 0.0 else 0.0
-    }
-
-    if (showRange) {
-        val rstate = rememberDateRangePickerState()
-        DatePickerDialog(
-            onDismissRequest = { showRange = false },
-            confirmButton = {
-                TextButton(onClick = {
-                    rstate.selectedStartDateMillis?.let {
-                        customStart = utcToLocalStart(it)
-                        customEnd = rstate.selectedEndDateMillis?.let { e -> utcToLocalEnd(e) }
-                    }
-                    showRange = false
-                }) { Text("OK") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showRange = false }) { Text("Cancelar") }
-            }
-        ) {
-            DateRangePicker(state = rstate, showModeToggle = false)
-        }
+        if (f.size >= 3) histDouble(f[2]) else 0.0
     }
 
     Column(
@@ -774,7 +736,7 @@ private fun HistoryScreen(modifier: Modifier = Modifier) {
                 Spacer(Modifier.height(12.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        "${filtered.size} corridas",
+                        "Hoje · ${filtered.size} corridas",
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontSize = 13.sp,
                         modifier = Modifier.weight(1f)
@@ -784,35 +746,6 @@ private fun HistoryScreen(modifier: Modifier = Modifier) {
                         color = MaterialTheme.colorScheme.primary,
                         fontSize = 20.sp,
                         fontWeight = FontWeight.Bold
-                    )
-                }
-                Spacer(Modifier.height(10.dp))
-                Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    options.forEachIndexed { i, label ->
-                        FilterChip(
-                            selected = selIdx == i,
-                            onClick = {
-                                selIdx = i
-                                if (i == 3 && customStart == null) showRange = true
-                            },
-                            label = { Text(label, fontSize = 12.sp) }
-                        )
-                    }
-                }
-                if (selIdx == 3) {
-                    Spacer(Modifier.height(6.dp))
-                    Text(
-                        buildString {
-                            append(customStart?.let { histDate(it) } ?: "Escolha o periodo abaixo")
-                            customEnd?.let { append(" ate ").append(histDate(it)) }
-                        },
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSize = 11.sp
                     )
                 }
                 Spacer(Modifier.height(8.dp))
@@ -840,7 +773,7 @@ private fun HistoryScreen(modifier: Modifier = Modifier) {
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    "Nenhuma corrida nesse periodo.",
+                    "Nenhuma corrida registrada hoje.\nAs ofertas exibidas aparecem aqui.",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 13.sp
                 )
@@ -851,11 +784,11 @@ private fun HistoryScreen(modifier: Modifier = Modifier) {
                     val f = raw.split("|")
                     if (f.size >= 8) {
                         val app = f[1]
-                        val fare = f[2].toDoubleOrNull() ?: 0.0
-                        val km = f[3].toDoubleOrNull() ?: 0.0
-                        val min = f[4].toDoubleOrNull() ?: 0.0
-                        val perKm = f[5].toDoubleOrNull() ?: 0.0
-                        val perHour = f[6].toDoubleOrNull() ?: 0.0
+                        val fare = histDouble(f[2])
+                        val km = histDouble(f[3])
+                        val min = histDouble(f[4])
+                        val perKm = histDouble(f[5])
+                        val perHour = histDouble(f[6])
                         val score = f[7].toIntOrNull() ?: 0
                         val dotColor = when {
                             score >= 80 -> MaterialTheme.colorScheme.primary
@@ -926,6 +859,8 @@ private fun histTime(ms: String): String {
     }
 }
 
+private fun histDouble(s: String): Double = s.trim().replace(',', '.').toDoubleOrNull() ?: 0.0
+
 private fun kmCompact(v: Double): String {
     val num = if (v == v.toLong().toDouble()) {
         v.toLong().toString()
@@ -942,8 +877,6 @@ private fun minCompact(v: Double): String {
     return if (h > 0) "${h}h ${rest}min" else "$rest min"
 }
 
-private const val DAY_MS = 86_400_000L
-
 private fun startOfToday(): Long {
     val c = Calendar.getInstance()
     c.set(Calendar.HOUR_OF_DAY, 0)
@@ -951,31 +884,6 @@ private fun startOfToday(): Long {
     c.set(Calendar.SECOND, 0)
     c.set(Calendar.MILLISECOND, 0)
     return c.timeInMillis
-}
-
-private fun utcToLocalStart(utc: Long): Long {
-    val u = Calendar.getInstance(TimeZone.getTimeZone("UTC")).apply { timeInMillis = utc }
-    return localAt(u.get(Calendar.YEAR), u.get(Calendar.MONTH), u.get(Calendar.DAY_OF_MONTH), 0, 0, 0)
-}
-
-private fun utcToLocalEnd(utc: Long): Long {
-    val u = Calendar.getInstance(TimeZone.getTimeZone("UTC")).apply { timeInMillis = utc }
-    return localAt(u.get(Calendar.YEAR), u.get(Calendar.MONTH), u.get(Calendar.DAY_OF_MONTH), 23, 59, 59) + 999
-}
-
-private fun localAt(year: Int, month: Int, day: Int, hour: Int, minute: Int, second: Int): Long {
-    val c = Calendar.getInstance()
-    c.clear()
-    c.set(year, month, day, hour, minute, second)
-    return c.timeInMillis
-}
-
-private fun histDate(ms: Long): String {
-    return try {
-        SimpleDateFormat("dd/MM", Locale.getDefault()).format(Date(ms))
-    } catch (e: Exception) {
-        ""
-    }
 }
 
 private fun a11yActive(ctx: Context): Boolean {

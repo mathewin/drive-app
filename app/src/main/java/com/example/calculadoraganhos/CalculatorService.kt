@@ -13,6 +13,7 @@ import android.view.Display
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import java.util.concurrent.Executor
+import java.util.Locale
 
 class CalculatorService : AccessibilityService() {
 
@@ -601,11 +602,11 @@ class CalculatorService : AccessibilityService() {
             listOf(
                 System.currentTimeMillis().toString(),
                 app,
-                "%.2f".format(data.fare),
-                "%.2f".format(data.totalDistanceKm),
+                dot2(data.fare),
+                dot2(data.totalDistanceKm),
                 "%.0f".format(data.totalTimeMin),
-                "%.2f".format(res.perKm),
-                "%.2f".format(res.perHour),
+                dot2(res.perKm),
+                dot2(res.perHour),
                 res.score.toString(),
                 card.passenger ?: ""
             ).joinToString("|")
@@ -619,6 +620,8 @@ class CalculatorService : AccessibilityService() {
             rideArrived(card, res, app, prefs)
         }
     }
+
+    private fun dot2(v: Double): String = String.format(Locale.US, "%.2f", v)
 
     private fun updateOverlayFromShown(beep: Boolean) {
         val cur = shownCard ?: return
