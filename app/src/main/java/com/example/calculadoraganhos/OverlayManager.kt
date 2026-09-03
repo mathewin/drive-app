@@ -68,7 +68,8 @@ object OverlayManager {
         try {
             density = ctx.resources.displayMetrics.density
             content = c
-            if (view == null) {
+            val fresh = view == null
+            if (fresh) {
                 wm = ctx.getSystemService(Context.WINDOW_SERVICE) as? WindowManager
                 val root = LinearLayout(ctx).apply {
                     orientation = LinearLayout.VERTICAL
@@ -76,6 +77,9 @@ object OverlayManager {
                     setOnTouchListener(overlayTouch)
                 }
                 val p = buildParams(ctx)
+                root.alpha = 0f
+                root.scaleX = 0.85f
+                root.scaleY = 0.85f
                 wm?.addView(root, p)
                 view = root
                 params = p
@@ -84,6 +88,7 @@ object OverlayManager {
             rebuild(ctx, c)
             AppState.updateOverlayVisible(true)
             if (beep) beepAndVibrate(ctx)
+            animateIn(fresh)
             scheduleHide(ctx)
             DriveWinLog.log(
                 "ovl",
@@ -92,6 +97,22 @@ object OverlayManager {
         } catch (t: Throwable) {
             DriveWinLog.log("ovl", "ERRO no overlay: ${t.message}")
             cleanup()
+        }
+    }
+
+    private fun animateIn(fresh: Boolean) {
+        val v = view ?: return
+        try {
+            v.animate().cancel()
+            if (fresh) {
+                v.animate().alpha(1f).scaleX(1f).scaleY(1f)
+                    .setDuration(260).start()
+            } else {
+                v.scaleX = 0.93f
+                v.scaleY = 0.93f
+                v.animate().scaleX(1f).scaleY(1f).setDuration(180).start()
+            }
+        } catch (_: Exception) {
         }
     }
 
@@ -169,9 +190,9 @@ object OverlayManager {
             gravity = Gravity.CENTER_VERTICAL
         }
         title.addView(
-            text(ctx, "DRIVEWIN", 11 * scale, COLOR_ROSA, true)
+            text(ctx, "DRIVEWIN", 13 * scale, COLOR_ROSA, true)
         )
-        val badge = text(ctx, c.result.level.label, 10 * scale, COLOR_BG, true).apply {
+        val badge = text(ctx, c.result.level.label, 11 * scale, COLOR_BG, true).apply {
             setPadding(dp(8), dp(2), dp(8), dp(2))
             setBackgroundColor(levelColor)
         }
@@ -181,11 +202,11 @@ object OverlayManager {
         root.addView(title)
 
         root.addView(
-            text(ctx, "${ParsingUtils.formatMoney(c.result.perKm)}/km", 20 * scale, COLOR_BRANCO, true),
+            text(ctx, "${ParsingUtils.formatMoney(c.result.perKm)}/km", 26 * scale, COLOR_BRANCO, true),
             paramsTop(dp(4))
         )
         root.addView(
-            text(ctx, "${ParsingUtils.formatMoney(c.result.perHour)}/h", 14 * scale, COLOR_CINZA, false),
+            text(ctx, "${ParsingUtils.formatMoney(c.result.perHour)}/h", 17 * scale, COLOR_CINZA, false),
             paramsTop(dp(2))
         )
         val passenger = c.passenger?.takeIf { it.isNotBlank() }
@@ -194,7 +215,7 @@ object OverlayManager {
                 text(
                     ctx,
                     if (passenger != null) "PASSAGEIRO  $passenger" else "NOTA ${c.result.score}/100",
-                    12 * scale,
+                    14 * scale,
                     if (passenger != null) COLOR_ROSA else levelColor,
                     true
                 ),
@@ -204,7 +225,7 @@ object OverlayManager {
 
         if (c.suspicious) {
             root.addView(
-                text(ctx, "Dados suspeitos", 10 * scale, COLOR_VERMELHO, true),
+                text(ctx, "Dados suspeitos", 11 * scale, COLOR_VERMELHO, true),
                 paramsTop(dp(4))
             )
         }
@@ -279,15 +300,27 @@ object OverlayManager {
 
     private fun beepAndVibrate(context: Context) {
         try {
-            val tg = ToneGenerator(AudioManager.STREAM_NOTIFICATION, 80)
-            tg.startTone(ToneGenerator.TONE_PROP_BEEP, 150)
-            tg.release()
+            val tg = ToneGenerator(AudioManager.STREAM_NOTIFICATION, 100)
+            try {
+                tg.startTone(ToneGenerator.TONE_PROP_BEEP2, 220)
+            } catch (_: Exception) {
+            }
+            main.postDelayed({
+                try {
+                    tg.startTone(ToneGenerator.TONE_PROP_BEEP2, 220)
+                } catch (_: Exception) {
+                }
+                try {
+                    tg.release()
+                } catch (_: Exception) {
+                }
+            }, 300)
         } catch (_: Exception) {
         }
         try {
             val vib = context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
             if (vib?.hasVibrator() == true) {
-                vib.vibrate(VibrationEffect.createOneShot(200, VibrationEffect.DEFAULT_AMPLITUDE))
+                vib.vibrate(VibrationEffect.createWaveform(longArrayOf(0, 400, 120, 400), -1))
             }
         } catch (_: Exception) {
         }

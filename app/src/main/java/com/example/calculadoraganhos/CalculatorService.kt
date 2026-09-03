@@ -32,6 +32,9 @@ class CalculatorService : AccessibilityService() {
     private var lastDumpMs = 0L
     private var ocrCooldownMs = OCR_SLOW_MS
     private var lastTextSig = ""
+    private var scanSig = ""
+    private var lastOfferishMs = 0L
+    private var lastOfferMs = 0L
     private var ocrInFlight = false
     private var lastScannerUber = true
     private var lastOfferish = false
@@ -176,13 +179,50 @@ class CalculatorService : AccessibilityService() {
             ocrCooldownMs = OCR_SLOW_MS
             return
         }
+        val parser = if (lastScannerUber) UberParser else NinetyNineParser
+        if (treeDetectOffer(parser, lastScannerUber)) return
         ocrCooldownMs = when {
             state == State.DISPLAYING -> OCR_DISPLAY_MS
             lastOfferish -> OCR_FAST_MS
             else -> OCR_SLOW_MS
         }
-        val parser = if (lastScannerUber) UberParser else NinetyNineParser
         tryOcr(parser, lastScannerUber)
+    }
+
+    private fun treeDetectOffer(parser: CardParserBase, isUber: Boolean): Boolean {
+        val root = rootInActiveWindow ?: return false
+        val pkg = root.packageName?.toString()?.lowercase() ?: return false
+        if (!pkg.contains("com.ubercab") && !pkg.contains("br.com.taxiapp")) return false
+        val items = collect(root)
+        if (items.isEmpty()) return false
+        val texts = items.map { it.text }
+        val hasMoney = ParsingUtils.moneyValues(texts).isNotEmpty()
+        val hasKmOrMin = ParsingUtils.kmValues(texts).isNotEmpty() ||
+            ParsingUtils.minutesValues(texts).isNotEmpty()
+        if (!hasMoney && !hasKmOrMin) return false
+        val sig = buildString {
+            (ParsingUtils.moneyValues(texts) + ParsingUtils.kmValues(texts) +
+                ParsingUtils.minutesValues(texts))
+                .map { Math.round(it * 10) }
+                .sorted()
+                .forEach { append(it).append(',') }
+        }
+        if (sig == scanSig) return false
+        scanSig = sig
+        lastOfferish = true
+        lastOfferishMs = System.currentTimeMillis()
+        if (hasMoney && hasKmOrMin) lastOfferMs = System.currentTimeMillis()
+        val card = parser.parse(items)
+        if (card != null) {
+            DriveWinLog.log(
+                "calc",
+                "oferta lida pela arvore de acessibilidade (scan rapido) - " +
+                    "fare=${card.data.fare} km=${card.data.totalDistanceKm} min=${card.data.totalTimeMin}"
+            )
+            handleCard(card, isUber, System.currentTimeMillis())
+            return true
+        }
+        return false
     }
 
     override fun onServiceConnected() {
@@ -245,6 +285,8 @@ class CalculatorService : AccessibilityService() {
             ParsingUtils.minutesValues(texts).isNotEmpty()
         val canDirect = hasWords || (hasMoney && hasKmOrMin)
         lastOfferish = hasMoney || hasKmOrMin || hasWords
+        if (lastOfferish) lastOfferishMs = now
+        if (hasMoney && hasKmOrMin) lastOfferMs = now
 
         if (canDirect) {
             setState(State.READING)
@@ -298,7 +340,8 @@ class CalculatorService : AccessibilityService() {
         val disp = shownCard
         if (disp != null && similar(disp, card)) {
             val lastShownAge = nowMs - lastShownMs
-            if (lastShownAge < holdMs() || lastShownAge < SIMILAR_LOCK_MS) {
+            val oldOfferStillOnScreen = nowMs - lastOfferMs < FRESH_OFFER_GAP_MS
+            if ((lastShownAge < holdMs() || lastShownAge < SIMILAR_LOCK_MS) && oldOfferStillOnScreen) {
                 if (disp.passenger == null && card.passenger != null) {
                     refreshPassenger(card)
                 } else {
@@ -484,11 +527,12 @@ class CalculatorService : AccessibilityService() {
         private const val TAG = "DriveWin"
         private const val DEBOUNCE_MS = 100L
         private const val OCR_CONFIRM_MIN_MS = 400L
-        private const val SCAN_INTERVAL_MS = 600L
+        private const val SCAN_INTERVAL_MS = 300L
         private const val SIMILAR_LOCK_MS = 45000L
-        private const val RIDE_WINDOW_MS = 30000L
+        private const val RIDE_WINDOW_MS = 600000L
         private const val OCR_FAST_MS = 600L
         private const val OCR_SLOW_MS = 1500L
         private const val OCR_DISPLAY_MS = 800L
+        private const val FRESH_OFFER_GAP_MS = 2500L
     }
 }
