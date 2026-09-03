@@ -21,8 +21,10 @@ class CalculatorService : AccessibilityService() {
     private var state = State.IDLE
     private var lastEventMs = 0L
     private var lastHash: String? = null
-    private var pending: ParsedCard? = null
-    private var pendingMs = 0L
+    private var shownCard: ParsedCard? = null
+    private var lastShownMs = 0L
+    private var stableOcr: ParsedCard? = null
+    private var stableOcrMs = 0L
     private var lastOcrTryMs = 0L
     private var lastCtxTag = ""
     private var lastCtxMs = 0L
@@ -223,6 +225,7 @@ class CalculatorService : AccessibilityService() {
                 OverlayManager.hide()
                 DriveWinLog.log("calc", "saiu do app de corrida - card escondido")
             }
+            resetOfferState()
             setState(State.IDLE)
             return
         }
@@ -290,18 +293,38 @@ class CalculatorService : AccessibilityService() {
     }
 
     private fun handleCard(card: ParsedCard, isUber: Boolean, now: Long) {
-        val prev = pending
-        if (prev != null && now - pendingMs < CONFIRM_WINDOW_MS) {
-            if (sameCard(prev, card)) {
-                pending = card.copy(confirmed = true)
-            } else {
-                pending = card
+        val nowMs = if (now > 0L) now else System.currentTimeMillis()
+        val disp = shownCard
+        if (disp != null && similar(disp, card)) {
+            val lastShownAge = nowMs - lastShownMs
+            if (lastShownAge < holdMs() || lastShownAge < SIMILAR_LOCK_MS) {
+                DriveWinLog.log(
+                    "calc",
+                    "mesma oferta ainda na tela (variacao de leitura) - mantendo " +
+                        "fare=${card.data.fare} km=${card.data.totalDistanceKm} min=${card.data.totalTimeMin}"
+                )
+                return
+            }
+        }
+        if (card.confidence >= 1.0) {
+            displayIfNew(card, isUber)
+            return
+        }
+        val st = stableOcr
+        if (st != null && similar(st, card)) {
+            if (nowMs - stableOcrMs >= OCR_CONFIRM_MIN_MS) {
+                stableOcr = null
+                DriveWinLog.log(
+                    "calc",
+                    "leitura OCR consistente em 2 telas - confirmando " +
+                        "fare=${card.data.fare} km=${card.data.totalDistanceKm} min=${card.data.totalTimeMin}"
+                )
+                displayIfNew(card, isUber)
             }
         } else {
-            pending = card
+            stableOcr = card
+            stableOcrMs = nowMs
         }
-        pendingMs = now
-        displayIfNew(card, isUber)
     }
 
     private fun displayIfNew(card: ParsedCard, isUber: Boolean) {
@@ -321,6 +344,9 @@ class CalculatorService : AccessibilityService() {
             return
         }
         lastHash = hash
+        shownCard = card
+        lastShownMs = System.currentTimeMillis()
+        stableOcr = null
 
         setState(State.VALIDATING)
         val prefs = Prefs(this)
@@ -373,10 +399,27 @@ class CalculatorService : AccessibilityService() {
         )
     }
 
-    private fun sameCard(a: ParsedCard, b: ParsedCard): Boolean {
-        return Math.abs(a.data.fare - b.data.fare) < 0.01 &&
-            Math.abs(a.data.totalDistanceKm - b.data.totalDistanceKm) < 0.05 &&
-            Math.abs(a.data.totalTimeMin - b.data.totalTimeMin) < 0.5
+    private fun similar(a: ParsedCard, b: ParsedCard): Boolean {
+        val x = a.data
+        val y = b.data
+        fun near(p: Double, q: Double, floor: Double): Boolean {
+            return Math.abs(p - q) <= Math.max(floor, Math.max(p, q) * 0.25)
+        }
+        return near(x.fare, y.fare, 1.0) &&
+            near(x.totalDistanceKm, y.totalDistanceKm, 0.5) &&
+            near(x.totalTimeMin, y.totalTimeMin, 1.0)
+    }
+
+    private fun holdMs(): Long {
+        return (Prefs(this).overlayShowSeconds * 1000L) + 2000L
+    }
+
+    private fun resetOfferState() {
+        shownCard = null
+        lastShownMs = 0L
+        lastHash = null
+        stableOcr = null
+        stableOcrMs = 0L
     }
 
     private fun setState(s: State) {
@@ -410,8 +453,9 @@ class CalculatorService : AccessibilityService() {
     companion object {
         private const val TAG = "DriveWin"
         private const val DEBOUNCE_MS = 100L
-        private const val CONFIRM_WINDOW_MS = 800L
+        private const val OCR_CONFIRM_MIN_MS = 400L
         private const val SCAN_INTERVAL_MS = 600L
+        private const val SIMILAR_LOCK_MS = 45000L
         private const val RIDE_WINDOW_MS = 3000L
         private const val OCR_FAST_MS = 600L
         private const val OCR_SLOW_MS = 1500L
