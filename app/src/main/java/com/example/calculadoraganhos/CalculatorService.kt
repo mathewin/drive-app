@@ -820,7 +820,7 @@ class CalculatorService : AccessibilityService() {
         private const val TAG = "DriveWin"
         private const val OCR_CONFIRM_MIN_MS = 250L
         private const val SCAN_INTERVAL_MS = 300L
-        private const val OFFER_ABSENT_CONFIRM_MS = 2500L
+        private const val OFFER_ABSENT_CONFIRM_MS = 3000L
         private const val RIDE_FALLBACK_MS = 6000L
         private const val RIDE_GONE_CONFIRM_MS = 2000L
         private const val OCR_FAST_MS = 250L
@@ -831,6 +831,6 @@ class CalculatorService : AccessibilityService() {
         private const val OCR_MAX_CONFIRM = 3
         private const val OFFER_ACTIVE_MS = 8000L
         private const val FRESH_OFFER_GAP_MS = 2500L
-        private const val STALE_OFFER_MS = 1200L
+        private const val STALE_OFFER_MS = 3000L
     }
 }

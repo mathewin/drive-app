@@ -45,6 +45,10 @@ class Prefs(context: Context) {
         get() = sp.getBoolean("ov_score", true)
         set(v) = sp.edit().putBoolean("ov_score", v).apply()
 
+    var showAddresses: Boolean
+        get() = sp.getBoolean("ov_addresses", false)
+        set(v) = sp.edit().putBoolean("ov_addresses", v).apply()
+
     var overlayAlert: Boolean
         get() = sp.getBoolean("ov_alert", true)
         set(v) = sp.edit().putBoolean("ov_alert", v).apply()

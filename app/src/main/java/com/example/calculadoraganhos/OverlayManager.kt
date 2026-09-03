@@ -216,16 +216,20 @@ object OverlayManager {
         })
         root.addView(title)
 
-        root.addView(
-            text(ctx, "${ParsingUtils.formatMoney(c.result.perKm)}/km", 26 * scale, COLOR_BRANCO, true),
-            paramsTop(dp(4))
-        )
-        root.addView(
-            text(ctx, "${ParsingUtils.formatMoney(c.result.perHour)}/h", 17 * scale, COLOR_CINZA, false),
-            paramsTop(dp(2))
-        )
+        if (prefs.showPerKm) {
+            root.addView(
+                text(ctx, "${ParsingUtils.formatMoney(c.result.perKm)}/km", 26 * scale, COLOR_BRANCO, true),
+                paramsTop(dp(4))
+            )
+        }
+        if (prefs.showPerHour) {
+            root.addView(
+                text(ctx, "${ParsingUtils.formatMoney(c.result.perHour)}/h", 17 * scale, COLOR_CINZA, false),
+                paramsTop(dp(2))
+            )
+        }
         val passenger = c.passenger?.takeIf { it.isNotBlank() }
-        if (prefs.showScore || passenger != null) {
+        if (prefs.showScore) {
             root.addView(
                 text(
                     ctx,
@@ -238,17 +242,19 @@ object OverlayManager {
             )
         }
 
-        c.pickup?.let { addr ->
-            root.addView(
-                addressBlock(ctx, "EMBARQUE", addr, COLOR_VERDE, scale),
-                paramsTop(dp(6))
-            )
-        }
-        c.dropoff?.let { addr ->
-            root.addView(
-                addressBlock(ctx, "DESEMBARQUE", addr, COLOR_ROSA, scale),
-                paramsTop(dp(2))
-            )
+        if (prefs.showAddresses) {
+            c.pickup?.let { addr ->
+                root.addView(
+                    addressBlock(ctx, "EMBARQUE", addr, COLOR_VERDE, scale),
+                    paramsTop(dp(6))
+                )
+            }
+            c.dropoff?.let { addr ->
+                root.addView(
+                    addressBlock(ctx, "DESEMBARQUE", addr, COLOR_ROSA, scale),
+                    paramsTop(dp(2))
+                )
+            }
         }
 
         if (c.suspicious) {

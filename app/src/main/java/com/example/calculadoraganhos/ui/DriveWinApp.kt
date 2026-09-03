@@ -479,6 +479,7 @@ private fun MetasScreen(
         ToggleRow("Mostrar R\$/km", prefs.showPerKm) { prefs.showPerKm = it }
         ToggleRow("Mostrar R\$/h", prefs.showPerHour) { prefs.showPerHour = it }
         ToggleRow("Mostrar nota", prefs.showScore) { prefs.showScore = it }
+        ToggleRow("Mostrar embarque/desembarque no card", prefs.showAddresses) { prefs.showAddresses = it }
         ToggleRow("Alerta sonoro + vibracao", prefs.overlayAlert) { prefs.overlayAlert = it }
 
         Spacer(Modifier.height(24.dp))
