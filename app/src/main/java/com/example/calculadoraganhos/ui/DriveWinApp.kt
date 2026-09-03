@@ -59,6 +59,7 @@ import com.example.calculadoraganhos.CalculatorService
 import com.example.calculadoraganhos.CrashReport
 import com.example.calculadoraganhos.DriveWinLog
 import com.example.calculadoraganhos.OcrFallback
+import com.example.calculadoraganhos.OverlayManager
 import com.example.calculadoraganhos.ParsingUtils
 import com.example.calculadoraganhos.Prefs
 import kotlinx.coroutines.delay
@@ -111,7 +112,8 @@ fun DriveWinApp(
         when (tab) {
             0 -> LeituraScreen(
                 Modifier.padding(padding),
-                openA11y, openOverlay, openBattery, startMonitor, stopMonitor, testOverlay
+                openA11y, openOverlay, openBattery, startMonitor, stopMonitor, testOverlay,
+                requestNotif, requestStorage, testNotif
             )
             1 -> MetasScreen(
                 Modifier.padding(padding),
@@ -133,7 +135,10 @@ private fun LeituraScreen(
     openBattery: () -> Unit,
     startMonitor: () -> Unit,
     stopMonitor: () -> Unit,
-    testOverlay: () -> Unit
+    testOverlay: () -> Unit,
+    requestNotif: () -> Unit,
+    requestStorage: () -> Unit,
+    testNotif: () -> Unit
 ) {
     val ctx = LocalContext.current
     var tick by remember { mutableIntStateOf(0) }
@@ -150,6 +155,7 @@ private fun LeituraScreen(
     val serviceState = AppState.serviceState
     val lastOffer = remember(tick) { Prefs(ctx).lastOffer }
     val ocrAvail = remember(tick) { OcrFallback.available() }
+    val prefs = remember { Prefs(ctx) }
     val on = monitorFlag && a11y && overlay
 
     Column(
@@ -182,6 +188,49 @@ private fun LeituraScreen(
         PermRow("Acessibilidade", if (a11y) "Ativa" else "Desativada", a11y, openA11y)
         PermRow("Sobreposicao", if (overlay) "Permitida" else "Nao permitida", overlay, openOverlay)
         PermRow("Bateria", if (battery) "Isenta" else "Ativa", battery, openBattery)
+
+        Spacer(Modifier.height(24.dp))
+        SectionTitle("OPCOES DO CARD")
+        Spacer(Modifier.height(4.dp))
+        ToggleRow("Mostrar R\$/km", prefs.showPerKm) {
+            prefs.showPerKm = it
+            OverlayManager.refresh(ctx)
+        }
+        ToggleRow("Mostrar R\$/h", prefs.showPerHour) {
+            prefs.showPerHour = it
+            OverlayManager.refresh(ctx)
+        }
+        ToggleRow("Mostrar nota/passageiro", prefs.showScore) {
+            prefs.showScore = it
+            OverlayManager.refresh(ctx)
+        }
+        ToggleRow("Embarque/desembarque no card", prefs.showAddresses) {
+            prefs.showAddresses = it
+            OverlayManager.refresh(ctx)
+        }
+        ToggleRow("Alerta sonoro + vibracao", prefs.overlayAlert) {
+            prefs.overlayAlert = it
+        }
+        ToggleRow("Card silencioso na barra", prefs.cardNotify) {
+            prefs.cardNotify = it
+            if (it) requestNotif()
+        }
+        ToggleRow("Print automatico na galeria", prefs.printAuto) {
+            prefs.printAuto = it
+            if (it) requestStorage()
+        }
+
+        Spacer(Modifier.height(16.dp))
+        Button(
+            onClick = testNotif,
+            modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                contentColor = MaterialTheme.colorScheme.secondary
+            )
+        ) {
+            Text("TESTAR CARD NA BARRA", fontWeight = FontWeight.Bold)
+        }
 
         Spacer(Modifier.height(16.dp))
         Button(
@@ -479,10 +528,22 @@ private fun MetasScreen(
             range = 3f..15f,
             onValue = { prefs.overlayShowSeconds = it.toInt() }
         )
-        ToggleRow("Mostrar R\$/km", prefs.showPerKm) { prefs.showPerKm = it }
-        ToggleRow("Mostrar R\$/h", prefs.showPerHour) { prefs.showPerHour = it }
-        ToggleRow("Mostrar nota", prefs.showScore) { prefs.showScore = it }
-        ToggleRow("Mostrar embarque/desembarque no card", prefs.showAddresses) { prefs.showAddresses = it }
+        ToggleRow("Mostrar R\$/km", prefs.showPerKm) {
+            prefs.showPerKm = it
+            OverlayManager.refresh(ctx)
+        }
+        ToggleRow("Mostrar R\$/h", prefs.showPerHour) {
+            prefs.showPerHour = it
+            OverlayManager.refresh(ctx)
+        }
+        ToggleRow("Mostrar nota", prefs.showScore) {
+            prefs.showScore = it
+            OverlayManager.refresh(ctx)
+        }
+        ToggleRow("Mostrar embarque/desembarque no card", prefs.showAddresses) {
+            prefs.showAddresses = it
+            OverlayManager.refresh(ctx)
+        }
         ToggleRow("Alerta sonoro + vibracao", prefs.overlayAlert) { prefs.overlayAlert = it }
 
         Spacer(Modifier.height(24.dp))
@@ -590,6 +651,8 @@ private fun SliderSection(
 
 @Composable
 private fun ToggleRow(label: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+    var on by remember { mutableStateOf(checked) }
+    LaunchedEffect(checked) { on = checked }
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -597,7 +660,13 @@ private fun ToggleRow(label: String, checked: Boolean, onChange: (Boolean) -> Un
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(label, color = MaterialTheme.colorScheme.onSurface, fontSize = 14.sp, modifier = Modifier.weight(1f))
-        Switch(checked = checked, onCheckedChange = onChange)
+        Switch(
+            checked = on,
+            onCheckedChange = {
+                on = it
+                onChange(it)
+            }
+        )
     }
 }
 

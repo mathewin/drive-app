@@ -53,6 +53,8 @@ object OverlayManager {
     private var hideRunnable: Runnable? = null
     private var lastX = 0f
     private var lastY = 0f
+    private var downX = 0f
+    private var downY = 0f
     private var dragging = false
     private var density = 1f
     private val main = Handler(Looper.getMainLooper())
@@ -135,19 +137,37 @@ object OverlayManager {
 
     fun isVisible(): Boolean = view != null
 
+    fun refresh(context: Context) {
+        runOnMain {
+            val c = content
+            val v = view
+            if (v != null && c != null) {
+                try {
+                    rebuild(context.applicationContext, c)
+                } catch (t: Throwable) {
+                    DriveWinLog.log("ovl", "erro ao re-renderizar card: ${t.message}")
+                }
+            }
+        }
+    }
+
     private val overlayTouch = View.OnTouchListener { v, ev ->
         val p = params ?: return@OnTouchListener false
         when (ev.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 lastX = ev.rawX
                 lastY = ev.rawY
+                downX = ev.rawX
+                downY = ev.rawY
                 dragging = false
                 true
             }
             MotionEvent.ACTION_MOVE -> {
                 val dx = ev.rawX - lastX
                 val dy = ev.rawY - lastY
-                if (!dragging && (abs(dx) > dp(6).toFloat() || abs(dy) > dp(6).toFloat())) dragging = true
+                if (!dragging && (abs(ev.rawX - downX) > dp(10).toFloat() || abs(ev.rawY - downY) > dp(10).toFloat())) {
+                    dragging = true
+                }
                 if (dragging) {
                     p.x += dx.roundToInt()
                     p.y += dy.roundToInt()
@@ -160,8 +180,11 @@ object OverlayManager {
                 }
                 true
             }
-            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                if (dragging) {
+            MotionEvent.ACTION_UP -> {
+                val dx = ev.rawX - downX
+                val dy = ev.rawY - downY
+                val moved = abs(dx) > dp(18).toFloat() || abs(dy) > dp(18).toFloat()
+                if (dragging && moved) {
                     val ctx = v.context.applicationContext
                     val prefs = Prefs(ctx)
                     prefs.overlayPositionX = p.x
@@ -176,6 +199,7 @@ object OverlayManager {
                 }
                 true
             }
+            MotionEvent.ACTION_CANCEL -> true
             else -> false
         }
     }
