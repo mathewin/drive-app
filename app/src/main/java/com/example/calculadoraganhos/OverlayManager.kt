@@ -48,10 +48,24 @@ object OverlayManager {
     private var lastY = 0f
     private var dragging = false
     private var density = 1f
+    private val main = Handler(Looper.getMainLooper())
+
+    private fun runOnMain(block: () -> Unit) {
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            block()
+        } else {
+            main.post(block)
+        }
+    }
 
     fun show(context: Context, c: OverlayContent, beep: Boolean) {
+        runOnMain {
+            showOnMain(context.applicationContext, c, beep)
+        }
+    }
+
+    private fun showOnMain(ctx: Context, c: OverlayContent, beep: Boolean) {
         try {
-            val ctx = context.applicationContext
             density = ctx.resources.displayMetrics.density
             content = c
             if (view == null) {
@@ -82,9 +96,11 @@ object OverlayManager {
     }
 
     fun hide() {
-        hideRunnable?.let { Handler(Looper.getMainLooper()).removeCallbacks(it) }
-        hideRunnable = null
-        cleanup()
+        runOnMain {
+            hideRunnable?.let { main.removeCallbacks(it) }
+            hideRunnable = null
+            cleanup()
+        }
     }
 
     private val overlayTouch = View.OnTouchListener { v, ev ->
@@ -235,7 +251,7 @@ object OverlayManager {
     private fun scheduleHide(ctx: Context) {
         val runnable = Runnable { hide() }
         hideRunnable = runnable
-        Handler(Looper.getMainLooper()).postDelayed(runnable, Prefs(ctx).overlayShowSeconds * 1000L)
+        main.postDelayed(runnable, Prefs(ctx).overlayShowSeconds * 1000L)
     }
 
     private fun buildParams(ctx: Context): WindowManager.LayoutParams {

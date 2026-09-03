@@ -310,17 +310,19 @@ class CalculatorService : AccessibilityService() {
             displayIfNew(card, isUber)
             return
         }
+        if (disp == null) {
+            displayIfNew(card, isUber)
+            return
+        }
         val st = stableOcr
-        if (st != null && similar(st, card)) {
-            if (nowMs - stableOcrMs >= OCR_CONFIRM_MIN_MS) {
-                stableOcr = null
-                DriveWinLog.log(
-                    "calc",
-                    "leitura OCR consistente em 2 telas - confirmando " +
-                        "fare=${card.data.fare} km=${card.data.totalDistanceKm} min=${card.data.totalTimeMin}"
-                )
-                displayIfNew(card, isUber)
-            }
+        if (st != null && similar(st, card) && nowMs - stableOcrMs >= OCR_CONFIRM_MIN_MS) {
+            stableOcr = null
+            DriveWinLog.log(
+                "calc",
+                "leitura OCR consistente em 2 telas - trocando card " +
+                    "fare=${card.data.fare} km=${card.data.totalDistanceKm} min=${card.data.totalTimeMin}"
+            )
+            displayIfNew(card, isUber)
         } else {
             stableOcr = card
             stableOcrMs = nowMs
@@ -456,9 +458,9 @@ class CalculatorService : AccessibilityService() {
         private const val OCR_CONFIRM_MIN_MS = 400L
         private const val SCAN_INTERVAL_MS = 600L
         private const val SIMILAR_LOCK_MS = 45000L
-        private const val RIDE_WINDOW_MS = 3000L
+        private const val RIDE_WINDOW_MS = 30000L
         private const val OCR_FAST_MS = 600L
         private const val OCR_SLOW_MS = 1500L
-        private const val OCR_DISPLAY_MS = 1500L
+        private const val OCR_DISPLAY_MS = 800L
     }
 }
