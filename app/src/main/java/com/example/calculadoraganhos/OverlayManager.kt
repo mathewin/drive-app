@@ -50,6 +50,8 @@ object OverlayManager {
     private var density = 1f
     private val main = Handler(Looper.getMainLooper())
 
+    var onCardClosed: (() -> Unit)? = null
+
     private fun runOnMain(block: () -> Unit) {
         if (Looper.myLooper() == Looper.getMainLooper()) {
             block()
@@ -158,8 +160,12 @@ object OverlayManager {
                     prefs.overlayPositionX = p.x
                     prefs.overlayPositionY = p.y
                 } else {
-                    DriveWinLog.log("ovl", "toque no card - fechando")
+                    DriveWinLog.log("ovl", "toque no card - fechando e liberando leitura")
                     hide()
+                    try {
+                        onCardClosed?.invoke()
+                    } catch (_: Exception) {
+                    }
                 }
                 true
             }
@@ -272,7 +278,14 @@ object OverlayManager {
     }
 
     private fun scheduleHide(ctx: Context) {
-        val runnable = Runnable { hide() }
+        hideRunnable?.let { main.removeCallbacks(it) }
+        val runnable = Runnable {
+            hide()
+            try {
+                onCardClosed?.invoke()
+            } catch (_: Exception) {
+            }
+        }
         hideRunnable = runnable
         main.postDelayed(runnable, Prefs(ctx).overlayShowSeconds * 1000L)
     }

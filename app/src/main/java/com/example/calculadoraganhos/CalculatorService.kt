@@ -170,6 +170,20 @@ class CalculatorService : AccessibilityService() {
         offerAbsentSince = 0L
     }
 
+    private fun registerCardCloseRelease() {
+        OverlayManager.onCardClosed = {
+            DriveWinLog.log("calc", "card fechado (toque ou tempo) - leitura liberada imediatamente")
+            stableOcr = null
+            stableOcrMs = 0L
+            shownCard = null
+            lastShownMs = 0L
+            scanSig = ""
+            lastTextSig = ""
+            offerAbsentSince = 0L
+            if (state == State.DISPLAYING) setState(State.IDLE)
+        }
+    }
+
     private fun noteOfferAbsent() {
         val now = System.currentTimeMillis()
         val stale = shownCard != null || state != State.IDLE ||
@@ -305,6 +319,7 @@ class CalculatorService : AccessibilityService() {
         super.onServiceConnected()
         DriveWinLog.log("calc", "servico de acessibilidade conectado")
         setState(State.IDLE)
+        registerCardCloseRelease()
         if (Prefs(this).monitorOn) {
             DriveWinLog.log("calc", "monitor ligado - subindo FGS")
             try {
@@ -412,6 +427,7 @@ class CalculatorService : AccessibilityService() {
 
     override fun onDestroy() {
         DriveWinLog.log("calc", "servico destruido")
+        OverlayManager.onCardClosed = null
         stopScanner()
         OverlayManager.hide()
         try {
