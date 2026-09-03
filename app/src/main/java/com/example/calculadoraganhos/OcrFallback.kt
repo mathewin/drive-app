@@ -20,7 +20,7 @@ object OcrFallback {
 
     private const val TAG = "DriveWin"
     private const val COOLDOWN_MS = 8000L
-    private const val MAX_OCR_DIMENSION = 1440
+    private const val MAX_OCR_DIMENSION = 1080
 
     private var mediaProjection: MediaProjection? = null
     private var lastAttemptMs = 0L

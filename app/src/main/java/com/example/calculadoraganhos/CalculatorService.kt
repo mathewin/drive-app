@@ -174,7 +174,18 @@ class CalculatorService : AccessibilityService() {
         scheduleScan()
         if (ocrInFlight) return
         val now = System.currentTimeMillis()
-        val riding = lastForegroundRide && now - lastRideEvtMs < RIDE_WINDOW_MS
+        var riding = lastForegroundRide && now - lastRideEvtMs < RIDE_WINDOW_MS
+        if (!riding) {
+            val pkg = rootInActiveWindow?.packageName?.toString()?.lowercase()
+            if (pkg != null &&
+                (pkg.contains("com.ubercab") || pkg.contains("br.com.taxiapp"))
+            ) {
+                lastForegroundRide = true
+                lastRideEvtMs = now
+                lastScannerUber = pkg.contains("com.ubercab")
+                riding = true
+            }
+        }
         if (!riding) {
             ocrCooldownMs = OCR_SLOW_MS
             return
@@ -199,7 +210,13 @@ class CalculatorService : AccessibilityService() {
         val hasMoney = ParsingUtils.moneyValues(texts).isNotEmpty()
         val hasKmOrMin = ParsingUtils.kmValues(texts).isNotEmpty() ||
             ParsingUtils.minutesValues(texts).isNotEmpty()
-        if (!hasMoney && !hasKmOrMin) return false
+        if (!hasMoney && !hasKmOrMin) {
+            if (ParsingUtils.offerContext(texts)) {
+                lastOfferish = true
+                lastOfferishMs = System.currentTimeMillis()
+            }
+            return false
+        }
         val sig = buildString {
             (ParsingUtils.moneyValues(texts) + ParsingUtils.kmValues(texts) +
                 ParsingUtils.minutesValues(texts))
@@ -531,7 +548,7 @@ class CalculatorService : AccessibilityService() {
         private const val SIMILAR_LOCK_MS = 45000L
         private const val RIDE_WINDOW_MS = 600000L
         private const val OCR_FAST_MS = 600L
-        private const val OCR_SLOW_MS = 1500L
+        private const val OCR_SLOW_MS = 900L
         private const val OCR_DISPLAY_MS = 800L
         private const val FRESH_OFFER_GAP_MS = 2500L
     }
