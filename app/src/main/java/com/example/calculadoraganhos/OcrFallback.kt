@@ -2,6 +2,7 @@ package com.example.calculadoraganhos
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.Canvas
 import android.graphics.PixelFormat
 import android.graphics.Rect
 import android.hardware.display.DisplayManager
@@ -46,6 +47,15 @@ object OcrFallback {
     }
 
     fun available(): Boolean = mediaProjection != null
+
+    fun cropBottomRegion(bitmap: Bitmap): Bitmap {
+        val top = (bitmap.height * BOTTOM_REGION_FRACTION).toInt()
+        if (top <= 0) return bitmap
+        val crop = Bitmap.createBitmap(bitmap.width, bitmap.height - top, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(crop)
+        canvas.drawBitmap(bitmap, 0f, -top.toFloat(), null)
+        return crop
+    }
 
     fun runOcrOnBitmap(
         bitmap: Bitmap,
@@ -175,12 +185,14 @@ object OcrFallback {
                 } else {
                     bitmap
                 }
-                runOcrOnBitmap(finalBmp, parser) { card, items ->
+                val regionBmp = cropBottomRegion(finalBmp)
+                runOcrOnBitmap(regionBmp, parser) { card, items ->
                     if (card != null) {
                         Log.d(TAG, "ocr ok fare=${card.data.fare} km=${card.data.totalDistanceKm} min=${card.data.totalTimeMin}")
                         onParsed(card.copy(confidence = 0.6), items)
                     }
-                    finalBmp.recycle()
+                    if (regionBmp !== finalBmp) finalBmp.recycle()
+                    regionBmp.recycle()
                     cleanup()
                 }
             }, 250)

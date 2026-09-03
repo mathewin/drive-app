@@ -3,7 +3,14 @@ package com.example.calculadoraganhos
 import android.graphics.Rect
 import java.util.Locale
 
+const val BOTTOM_REGION_FRACTION = 0.45
+
 data class TextItem(val text: String, val bounds: Rect, val viewId: String? = null)
+
+fun inBottomRegion(bounds: Rect, screenHeight: Int): Boolean {
+    if (screenHeight <= 0) return true
+    return bounds.centerY() >= (screenHeight * BOTTOM_REGION_FRACTION).toInt()
+}
 
 data class RideData(
     val fare: Double,

@@ -90,7 +90,9 @@ class CalculatorService : AccessibilityService() {
                             DriveWinLog.log("calc", "screenshot vazio ou falha ao converter")
                             return
                         }
-                        OcrFallback.runOcrOnBitmap(bmp, { parser.parse(it) }) { card, items ->
+                        val regionBmp = OcrFallback.cropBottomRegion(bmp)
+                        if (regionBmp !== bmp) bmp.recycle()
+                        OcrFallback.runOcrOnBitmap(regionBmp, { parser.parse(it) }) { card, items ->
                             ocrInFlight = false
                             if (items.isNotEmpty()) dumpTexts("ocr", items)
                             if (card != null) {
@@ -99,6 +101,7 @@ class CalculatorService : AccessibilityService() {
                             } else if (lastOfferish) {
                                 lastOcrTryMs = System.currentTimeMillis() - 350L
                             }
+                            regionBmp.recycle()
                         }
                     }
 
@@ -267,7 +270,13 @@ class CalculatorService : AccessibilityService() {
     private fun treeDetectOffer(parser: CardParserBase, isUber: Boolean): Boolean {
         val (_, root) = rideWindowPackageAndRoot()
         if (root == null) return false
-        val items = collect(root)
+        val all = collect(root)
+        if (all.isEmpty()) {
+            noteOfferAbsent()
+            return false
+        }
+        val screenH = all.maxOf { it.bounds.bottom }
+        val items = all.filter { inBottomRegion(it.bounds, screenH) }
         if (items.isEmpty()) {
             noteOfferAbsent()
             return false
