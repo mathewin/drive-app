@@ -40,8 +40,9 @@ class CalculatorService : AccessibilityService() {
     private var scanHandler: Handler? = null
     private var scanPosted = false
     private var offerAbsentSince = 0L
+    private var rideGoneSince = 0L
     private var lastOcrNudgeMs = 0L
-    private var lastLeaveCheckMs = 0L
+    private var dismissedKey: String? = null
 
     private fun dumpTexts(source: String, items: List<TextItem>) {
         val now = System.currentTimeMillis()
@@ -162,7 +163,8 @@ class CalculatorService : AccessibilityService() {
         OverlayManager.onCardClosed = {
             stableOcr = null
             stableOcrMs = 0L
-            DriveWinLog.log("calc", "card fechado (toque ou tempo) - mesma oferta nao sera reexibida")
+            if (scanSig.isNotEmpty()) dismissedKey = scanSig
+            DriveWinLog.log("calc", "card fechado (toque ou tempo) - esta oferta nao reaparece ate sumir da tela")
         }
     }
 
@@ -216,8 +218,16 @@ class CalculatorService : AccessibilityService() {
             lastScannerUber = pkg.contains("com.ubercab")
             return true
         }
-        val evRiding = lastForegroundRide && now - lastRideEvtMs < RIDE_WINDOW_MS
-        return evRiding
+        val active = rootInActiveWindow
+        val ap = active?.packageName?.toString()?.lowercase() ?: ""
+        if (ap == "com.example.calculadoraganhos") return false
+        if (ap.contains("com.ubercab") || ap.contains("br.com.taxiapp")) {
+            lastForegroundRide = true
+            lastRideEvtMs = now
+            lastScannerUber = ap.contains("com.ubercab")
+            return true
+        }
+        return lastForegroundRide && now - lastRideEvtMs < RIDE_FALLBACK_MS
     }
 
     private fun scanTick() {
@@ -231,13 +241,18 @@ class CalculatorService : AccessibilityService() {
         if (!updateRideFocus(now)) {
             ocrCooldownMs = OCR_IDLE_MS
             if (shownCard != null || state == State.DISPLAYING) {
-                OverlayManager.hide()
-                resetOfferState()
-                setState(State.IDLE)
-                DriveWinLog.log("calc", "janela de corrida sumiu - card escondido")
+                if (rideGoneSince == 0L) rideGoneSince = now
+                if (now - rideGoneSince >= RIDE_GONE_CONFIRM_MS) {
+                    rideGoneSince = 0L
+                    OverlayManager.hide()
+                    resetOfferState()
+                    setState(State.IDLE)
+                    DriveWinLog.log("calc", "janela de corrida sumiu - card escondido")
+                }
             }
             return
         }
+        rideGoneSince = 0L
         val parser = if (lastScannerUber) UberParser else NinetyNineParser
         if (treeDetectOffer(parser, lastScannerUber)) return
         val displayingTreeCard = state == State.DISPLAYING && scanSig.isNotEmpty()
@@ -279,6 +294,14 @@ class CalculatorService : AccessibilityService() {
                 .map { Math.round(it * 10) }
                 .sorted()
                 .forEach { append(it).append(',') }
+        }
+        val dismissed = dismissedKey
+        if (dismissed != null) {
+            if (sig == dismissed) {
+                scanSig = sig
+                return false
+            }
+            dismissedKey = null
         }
         if (sig == scanSig) return false
         scanSig = sig
@@ -340,20 +363,6 @@ class CalculatorService : AccessibilityService() {
                 lastOcrNudgeMs = now
                 lastOcrTryMs = 0L
                 ocrCooldownMs = OCR_FAST_MS
-            }
-            return
-        }
-        if (shownCard != null || state == State.DISPLAYING) {
-            if (now - lastLeaveCheckMs >= LEAVE_CHECK_MS) {
-                lastLeaveCheckMs = now
-                val (wp, _) = rideWindowPackageAndRoot()
-                if (wp == null) {
-                    OverlayManager.hide()
-                    resetOfferState()
-                    setState(State.IDLE)
-                    lastForegroundRide = false
-                    DriveWinLog.log("calc", "saiu do app de corrida - card escondido")
-                }
             }
         }
     }
@@ -510,6 +519,7 @@ class CalculatorService : AccessibilityService() {
         stableOcr = null
         stableOcrMs = 0L
         scanSig = ""
+        dismissedKey = null
         offerAbsentSince = 0L
     }
 
@@ -568,12 +578,12 @@ class CalculatorService : AccessibilityService() {
         private const val OCR_CONFIRM_MIN_MS = 400L
         private const val SCAN_INTERVAL_MS = 300L
         private const val OFFER_ABSENT_CONFIRM_MS = 700L
-        private const val RIDE_WINDOW_MS = 600000L
+        private const val RIDE_FALLBACK_MS = 6000L
+        private const val RIDE_GONE_CONFIRM_MS = 2000L
         private const val OCR_FAST_MS = 600L
         private const val OCR_IDLE_MS = 3000L
         private const val OCR_NUDGE_MS = 1500L
         private const val OFFER_ACTIVE_MS = 8000L
         private const val FRESH_OFFER_GAP_MS = 2500L
-        private const val LEAVE_CHECK_MS = 400L
     }
 }
