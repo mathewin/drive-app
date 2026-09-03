@@ -20,6 +20,7 @@ object OcrFallback {
 
     private const val TAG = "DriveWin"
     private const val COOLDOWN_MS = 8000L
+    private const val MAX_OCR_DIMENSION = 1440
 
     private var mediaProjection: MediaProjection? = null
     private var lastAttemptMs = 0L
@@ -52,8 +53,9 @@ object OcrFallback {
         onResult: (ParsedCard?, List<TextItem>) -> Unit
     ) {
         try {
+            val source = downscaleIfNeeded(bitmap)
             val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
-            recognizer.process(InputImage.fromBitmap(bitmap, 0))
+            recognizer.process(InputImage.fromBitmap(source, 0))
                 .addOnSuccessListener { result ->
                     val items = result.textBlocks
                         .flatMap { block -> block.lines }
@@ -70,17 +72,34 @@ object OcrFallback {
                         Log.w(TAG, "parser fail: ${e.message}")
                         null
                     }
+                    if (source !== bitmap) source.recycle()
                     onResult(card, items)
                     recognizer.close()
                 }
                 .addOnFailureListener { e ->
                     Log.w(TAG, "ocr fail: ${e.message}")
+                    if (source !== bitmap) source.recycle()
                     recognizer.close()
                     onResult(null, emptyList())
                 }
         } catch (e: Exception) {
             Log.w(TAG, "ocr bitmap fail: ${e.message}")
             onResult(null, emptyList())
+        }
+    }
+
+    private fun downscaleIfNeeded(bitmap: Bitmap): Bitmap {
+        return try {
+            val w = bitmap.width
+            val h = bitmap.height
+            val longest = maxOf(w, h)
+            if (longest <= MAX_OCR_DIMENSION) return bitmap
+            val scale = MAX_OCR_DIMENSION.toFloat() / longest
+            val nw = (w * scale).toInt().coerceAtLeast(320)
+            val nh = (h * scale).toInt().coerceAtLeast(320)
+            Bitmap.createScaledBitmap(bitmap, nw, nh, true)
+        } catch (e: Exception) {
+            bitmap
         }
     }
 

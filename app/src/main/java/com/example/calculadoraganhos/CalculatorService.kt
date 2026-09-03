@@ -29,6 +29,12 @@ class CalculatorService : AccessibilityService() {
     private var lastDumpMs = 0L
     private var ocrCooldownMs = OCR_SLOW_MS
     private var lastTextSig = ""
+    private var ocrInFlight = false
+    private var lastScannerUber = true
+    private var lastOfferish = false
+    private var scanThread: HandlerThread? = null
+    private var scanHandler: Handler? = null
+    private var scanPosted = false
 
     private fun logCtx(pkg: String, isUber: Boolean, msg: String) {
         val now = System.currentTimeMillis()
@@ -57,7 +63,9 @@ class CalculatorService : AccessibilityService() {
     private fun tryOcr(parser: CardParserBase, isUber: Boolean) {
         val now = System.currentTimeMillis()
         if (now - lastOcrTryMs < ocrCooldownMs) return
+        if (ocrInFlight) return
         lastOcrTryMs = now
+        ocrInFlight = true
         DriveWinLog.log("calc", "OCR: lendo a tela por imagem (acessibilidade)")
         if (Build.VERSION.SDK_INT >= 30) {
             try {
@@ -80,34 +88,90 @@ class CalculatorService : AccessibilityService() {
                             hb.close()
                         }
                         if (bmp == null) {
+                            ocrInFlight = false
                             DriveWinLog.log("calc", "screenshot vazio ou falha ao converter")
                             return
                         }
                         OcrFallback.runOcrOnBitmap(bmp, { parser.parse(it) }) { card, items ->
+                            ocrInFlight = false
                             if (items.isNotEmpty()) dumpTexts("ocr", items)
                             if (card != null) {
                                 DriveWinLog.log("calc", "OCR retornou card - validando")
                                 handleCard(card.copy(confidence = 0.6), isUber, System.currentTimeMillis())
-                            } else if (ocrCooldownMs == OCR_FAST_MS) {
-                                lastOcrTryMs = System.currentTimeMillis() - 400L
+                            } else if (lastOfferish) {
+                                lastOcrTryMs = System.currentTimeMillis() - 350L
                             }
                         }
                     }
 
                     override fun onFailure(errorCode: Int) {
+                        ocrInFlight = false
                         DriveWinLog.log("calc", "screenshot da acessibilidade falhou (codigo $errorCode)")
                     }
                 })
             } catch (e: Exception) {
+                ocrInFlight = false
                 DriveWinLog.log("calc", "erro no screenshot: ${e.message}")
             }
             return
         }
         OcrFallback.tryCaptureAndParse(this, parser = { parser.parse(it) }) { ocrCard, ocrItems ->
+            ocrInFlight = false
             DriveWinLog.log("calc", "OCR (media projection) retornou card - validando")
             if (ocrItems.isNotEmpty()) dumpTexts("ocr", ocrItems)
             handleCard(ocrCard, isUber, System.currentTimeMillis())
         }
+        ocrInFlight = false
+    }
+
+    private fun startScanner() {
+        if (scanThread != null) return
+        val st = HandlerThread("DriveWinScan").also { it.start() }
+        scanThread = st
+        scanHandler = Handler(st.looper)
+        scanPosted = false
+        DriveWinLog.log("calc", "scanner de leitura continuo iniciado")
+        scanHandler?.post { scanPosted = false; scheduleScan() }
+    }
+
+    private fun stopScanner() {
+        scanThread?.let { st ->
+            try {
+                scanHandler?.removeCallbacksAndMessages(null)
+            } catch (_: Exception) {
+            }
+            try {
+                st.quitSafely()
+            } catch (_: Exception) {
+            }
+        }
+        scanThread = null
+        scanHandler = null
+        scanPosted = false
+    }
+
+    private fun scheduleScan() {
+        if (!scanPosted && scanHandler != null) {
+            scanPosted = true
+            scanHandler?.postDelayed(::scanTick, SCAN_INTERVAL_MS)
+        }
+    }
+
+    private fun scanTick() {
+        scanPosted = false
+        if (!Prefs(this).monitorOn) {
+            stopScanner()
+            return
+        }
+        scheduleScan()
+        if (ocrInFlight) return
+        ocrCooldownMs = when {
+            state == State.DISPLAYING -> OCR_DISPLAY_MS
+            lastOfferish -> OCR_FAST_MS
+            else -> OCR_SLOW_MS
+        }
+        val parser = if (lastScannerUber) UberParser else NinetyNineParser
+        tryOcr(parser, lastScannerUber)
     }
 
     override fun onServiceConnected() {
@@ -122,6 +186,7 @@ class CalculatorService : AccessibilityService() {
                 Log.w(TAG, "fgs start: ${e.message}")
                 DriveWinLog.log("calc", "falha ao subir FGS: ${e.message}")
             }
+            startScanner()
         } else {
             DriveWinLog.log("calc", "monitor DESLIGADO - sem leitura")
         }
@@ -130,8 +195,10 @@ class CalculatorService : AccessibilityService() {
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (!Prefs(this).monitorOn) {
             if (state == State.DISPLAYING) OverlayManager.hide()
+            stopScanner()
             return
         }
+        startScanner()
         val root = rootInActiveWindow ?: return
         val pkg = root.packageName?.toString()?.lowercase() ?: return
         val isUber = pkg.contains("com.ubercab")
@@ -144,6 +211,7 @@ class CalculatorService : AccessibilityService() {
             setState(State.IDLE)
             return
         }
+        lastScannerUber = isUber
 
         logCtx(pkg, isUber, "vendo ${if (isUber) "UBER" else "99"} - aguardando oferta")
         val now = System.currentTimeMillis()
@@ -159,6 +227,7 @@ class CalculatorService : AccessibilityService() {
         val hasKmOrMin = ParsingUtils.kmValues(texts).isNotEmpty() ||
             ParsingUtils.minutesValues(texts).isNotEmpty()
         val canDirect = hasWords || (hasMoney && hasKmOrMin)
+        lastOfferish = hasMoney || hasKmOrMin || hasWords
 
         if (canDirect) {
             setState(State.READING)
@@ -198,6 +267,7 @@ class CalculatorService : AccessibilityService() {
 
     override fun onDestroy() {
         DriveWinLog.log("calc", "servico destruido")
+        stopScanner()
         OverlayManager.hide()
         try {
             RideForegroundService.stop(this)
@@ -328,7 +398,9 @@ class CalculatorService : AccessibilityService() {
         private const val TAG = "DriveWin"
         private const val DEBOUNCE_MS = 100L
         private const val CONFIRM_WINDOW_MS = 800L
-        private const val OCR_FAST_MS = 1000L
-        private const val OCR_SLOW_MS = 5000L
+        private const val SCAN_INTERVAL_MS = 600L
+        private const val OCR_FAST_MS = 600L
+        private const val OCR_SLOW_MS = 1500L
+        private const val OCR_DISPLAY_MS = 1500L
     }
 }
