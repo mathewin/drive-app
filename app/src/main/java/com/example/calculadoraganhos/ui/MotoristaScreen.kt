@@ -1,10 +1,5 @@
 package com.example.calculadoraganhos.ui
 
-import android.graphics.Color
-import android.webkit.CookieManager
-import android.webkit.WebView
-import android.webkit.WebViewClient
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -23,46 +18,24 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
-
-private const val MOTORISTA_URL = "https://motorista.drivewin.shop/"
+import androidx.activity.compose.BackHandler
 
 @Composable
-fun MotoristaScreen(onExit: () -> Unit) {
-    val ctx = LocalContext.current
-    var wv by remember { mutableStateOf<WebView?>(null) }
-    var loading by remember { mutableStateOf(true) }
-    var error by remember { mutableStateOf(false) }
-    var canGoBack by remember { mutableStateOf(false) }
-
-    fun sairPainel() {
-        wv?.evaluateJavascript(
-            "(function(){var done=function(){try{localStorage.clear();sessionStorage.clear();}catch(e){} location.href='${MOTORISTA_URL}';}; if(window.DWClient&&window.DWClient.auth){window.DWClient.auth.signOut().then(done)['catch'](done);}else{done();}})();",
-            null
-        )
-        CookieManager.getInstance().removeAllCookies(null)
-        CookieManager.getInstance().flush()
-    }
-
-    val pageError = { isMain: Boolean ->
-        if (isMain) {
-            loading = false
-            error = true
-        }
+fun MotoristaScreen(panel: MotoristaPanel, onExit: () -> Unit) {
+    DisposableEffect(Unit) {
+        panel.resume()
+        onDispose { panel.pause() }
     }
 
     BackHandler(enabled = true) {
-        if (wv?.canGoBack() == true) wv?.goBack() else onExit()
+        if (panel.canGoBack()) panel.goBack() else onExit()
     }
 
     Scaffold(containerColor = MaterialTheme.colorScheme.background) { padding ->
@@ -93,7 +66,7 @@ fun MotoristaScreen(onExit: () -> Unit) {
                     fontWeight = FontWeight.SemiBold
                 )
                 Spacer(Modifier.weight(1f))
-                TextButton(onClick = { wv?.reload() }) {
+                TextButton(onClick = { panel.reload() }) {
                     Text(
                         "\u21BB",
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -101,7 +74,7 @@ fun MotoristaScreen(onExit: () -> Unit) {
                         fontWeight = FontWeight.Bold
                     )
                 }
-                TextButton(onClick = { sairPainel() }) {
+                TextButton(onClick = { panel.sairPainel() }) {
                     Text(
                         "Sair",
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -120,45 +93,11 @@ fun MotoristaScreen(onExit: () -> Unit) {
             ) {
                 AndroidView(
                     modifier = Modifier.fillMaxSize(),
-                    factory = { context ->
-                        WebView(context).apply {
-                            setBackgroundColor(Color.TRANSPARENT)
-                            settings.javaScriptEnabled = true
-                            settings.domStorageEnabled = true
-                            settings.databaseEnabled = true
-                            settings.loadWithOverviewMode = true
-                            settings.useWideViewPort = true
-                            CookieManager.getInstance().let { cm ->
-                                cm.setAcceptCookie(true)
-                                cm.setAcceptThirdPartyCookies(this, true)
-                            }
-                            webViewClient = object : WebViewClient() {
-                                override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
-                                    loading = true
-                                    error = false
-                                }
-
-                                override fun onPageFinished(view: WebView?, url: String?) {
-                                    loading = false
-                                    error = false
-                                    canGoBack = view?.canGoBack() ?: false
-                                }
-
-                                override fun onReceivedError(
-                                    view: WebView?,
-                                    request: android.webkit.WebResourceRequest?,
-                                    error: android.webkit.WebResourceError?
-                                ) {
-                                    pageError(request?.isForMainFrame == true)
-                                }
-                            }
-                            loadUrl(MOTORISTA_URL)
-                        }.also { wv = it }
-                    },
-                    onRelease = { it.stopLoading(); it.destroy() }
+                    factory = { panel.ensure() },
+                    onRelease = { /* mantem o WebView vivo: nao destroi ao sair */ }
                 )
 
-                if (loading) {
+                if (panel.loading) {
                     Column(
                         modifier = Modifier
                             .fillMaxSize()
@@ -184,7 +123,7 @@ fun MotoristaScreen(onExit: () -> Unit) {
                     }
                 }
 
-                if (error && !loading) {
+                if (panel.error && !panel.loading) {
                     Column(
                         modifier = Modifier
                             .fillMaxSize()
@@ -206,11 +145,7 @@ fun MotoristaScreen(onExit: () -> Unit) {
                             fontSize = 12.sp
                         )
                         Spacer(Modifier.height(18.dp))
-                        Button(onClick = {
-                            error = false
-                            loading = true
-                            wv?.loadUrl(MOTORISTA_URL)
-                        }) { Text("Tentar de novo") }
+                        Button(onClick = { panel.retry() }) { Text("Tentar de novo") }
                     }
                 }
             }

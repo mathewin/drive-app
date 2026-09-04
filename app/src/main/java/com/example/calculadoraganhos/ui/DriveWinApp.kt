@@ -79,9 +79,11 @@ fun DriveWinApp(
 ) {
     var tab by remember { mutableIntStateOf(0) }
     var motoristaMode by remember { mutableStateOf(false) }
+    val appCtx = LocalContext.current.applicationContext
+    val motorista = remember { MotoristaPanel(appCtx) }
 
     if (motoristaMode) {
-        MotoristaScreen(onExit = { motoristaMode = false })
+        MotoristaScreen(panel = motorista, onExit = { motoristaMode = false })
     } else {
         Scaffold(
             containerColor = MaterialTheme.colorScheme.background,
