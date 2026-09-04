@@ -45,6 +45,15 @@ fun MotoristaScreen(onExit: () -> Unit) {
     var error by remember { mutableStateOf(false) }
     var canGoBack by remember { mutableStateOf(false) }
 
+    fun sairPainel() {
+        wv?.evaluateJavascript(
+            "(function(){var done=function(){try{localStorage.clear();sessionStorage.clear();}catch(e){} location.href='${MOTORISTA_URL}';}; if(window.DWClient&&window.DWClient.auth){window.DWClient.auth.signOut().then(done)['catch'](done);}else{done();}})();",
+            null
+        )
+        CookieManager.getInstance().removeAllCookies(null)
+        CookieManager.getInstance().flush()
+    }
+
     val pageError = { isMain: Boolean ->
         if (isMain) {
             loading = false
@@ -89,6 +98,14 @@ fun MotoristaScreen(onExit: () -> Unit) {
                         "\u21BB",
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                TextButton(onClick = { sairPainel() }) {
+                    Text(
+                        "Sair",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 13.sp,
                         fontWeight = FontWeight.Bold
                     )
                 }
