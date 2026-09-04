@@ -78,53 +78,57 @@ fun DriveWinApp(
     testNotif: () -> Unit
 ) {
     var tab by remember { mutableIntStateOf(0) }
+    var motoristaMode by remember { mutableStateOf(false) }
 
-    Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
-        bottomBar = {
-            NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
-                NavigationBarItem(
-                    selected = tab == 0,
-                    onClick = { tab = 0 },
-                    label = { Text("Leitura") },
-                    icon = { Text(if (tab == 0) "\u25C9" else "\u25CB") }
-                )
-                NavigationBarItem(
-                    selected = tab == 1,
-                    onClick = { tab = 1 },
-                    label = { Text("Metas") },
-                    icon = { Text(if (tab == 1) "\u25C9" else "\u25CB") }
-                )
-                NavigationBarItem(
-                    selected = tab == 2,
-                    onClick = { tab = 2 },
-                    label = { Text("Historico") },
-                    icon = { Text(if (tab == 2) "\u25C9" else "\u25CB") }
-                )
-                NavigationBarItem(
-                    selected = tab == 3,
-                    onClick = { tab = 3 },
-                    label = { Text("Motorista") },
-                    icon = { Text(if (tab == 3) "\u25C9" else "\u25CB") }
-                )
+    if (motoristaMode) {
+        MotoristaScreen(onExit = { motoristaMode = false })
+    } else {
+        Scaffold(
+            containerColor = MaterialTheme.colorScheme.background,
+            bottomBar = {
+                NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
+                    NavigationBarItem(
+                        selected = tab == 0,
+                        onClick = { tab = 0 },
+                        label = { Text("Leitura") },
+                        icon = { Text(if (tab == 0) "\u25C9" else "\u25CB") }
+                    )
+                    NavigationBarItem(
+                        selected = tab == 1,
+                        onClick = { tab = 1 },
+                        label = { Text("Metas") },
+                        icon = { Text(if (tab == 1) "\u25C9" else "\u25CB") }
+                    )
+                    NavigationBarItem(
+                        selected = tab == 2,
+                        onClick = { tab = 2 },
+                        label = { Text("Historico") },
+                        icon = { Text(if (tab == 2) "\u25C9" else "\u25CB") }
+                    )
+                    NavigationBarItem(
+                        selected = false,
+                        onClick = { motoristaMode = true },
+                        label = { Text("Motorista") },
+                        icon = { Text("\u25C9") }
+                    )
+                }
             }
-        }
-    ) { padding ->
-        when (tab) {
-            0 -> LeituraScreen(
-                Modifier.padding(padding),
-                openA11y, openOverlay, openBattery, startMonitor, stopMonitor, testOverlay,
-                requestNotif, requestStorage, testNotif
-            )
-            1 -> MetasScreen(
-                Modifier.padding(padding),
-                requestCapture,
-                requestNotif,
-                requestStorage,
-                testNotif
-            )
-            2 -> HistoryScreen(Modifier.padding(padding))
-            else -> MotoristaScreen(Modifier.padding(padding))
+        ) { padding ->
+            when (tab) {
+                0 -> LeituraScreen(
+                    Modifier.padding(padding),
+                    openA11y, openOverlay, openBattery, startMonitor, stopMonitor, testOverlay,
+                    requestNotif, requestStorage, testNotif
+                )
+                1 -> MetasScreen(
+                    Modifier.padding(padding),
+                    requestCapture,
+                    requestNotif,
+                    requestStorage,
+                    testNotif
+                )
+                else -> HistoryScreen(Modifier.padding(padding))
+            }
         }
     }
 }
