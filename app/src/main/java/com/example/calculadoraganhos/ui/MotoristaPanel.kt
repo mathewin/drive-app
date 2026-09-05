@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Color
 import android.webkit.CookieManager
+import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.compose.runtime.getValue
@@ -42,6 +43,7 @@ class MotoristaPanel(context: Context) {
         wv.settings.databaseEnabled = true
         wv.settings.loadWithOverviewMode = true
         wv.settings.useWideViewPort = true
+        wv.settings.cacheMode = WebSettings.LOAD_NO_CACHE
         CookieManager.getInstance().let { cm ->
             cm.setAcceptCookie(true)
             cm.setAcceptThirdPartyCookies(wv, true)
