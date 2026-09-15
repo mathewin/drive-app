@@ -50,6 +50,21 @@ adb logcat -s DriveWin
 
 Mostra `service connected`, `offer ... rkm=... rh=... nota=...`, `direct read falhou, tentando OCR`, `ocr ok ...` e `ocr fail`.
 
+## Painel de trabalho (cronometro + ganho do dia)
+
+Alem do card de ofertas, o app tem um **card flutuante de trabalho**, independente do card da corrida:
+
+- Cronometro com **INICIAR / PAUSAR / ZERAR**. Pausar nao zera: retoma de onde parou.
+- Arrastavel pra qualquer canto e lembra a posicao.
+- Campo de valor: ao pausar, o motorista digita o que fez e toca **OK**. O valor soma no total do dia e e enviado ao painel (`motorista.drivewin.shop`) para o rank / area de camp do dia.
+- Tempo trabalhado e ganho por **dia, semana e mes** aparecem na aba **Leitura**, na secao **Trabalho (cronometro)**.
+
+Como ligar:
+
+1. Aba **Leitura** -> **Painel de trabalho na tela** (precisa da permissao de Sobreposicao).
+2. Ajuste opacidade e fonte em **Metas** -> **Card de trabalho**.
+3. Para o valor cair no painel, e preciso estar logado no painel **Motorista** do app ao menos uma vez.
+
 ## Estrutura
 
 - `CalculatorService.kt` - servico de acessibilidade com maquina de estados
@@ -59,5 +74,8 @@ Mostra `service connected`, `offer ... rkm=... rh=... nota=...`, `direct read fa
 - `Validator.kt` - coerencia e valores suspeitos
 - `OverlayManager.kt` - card flutuante Compose (arrastavel, minimizavel, lembra posicao)
 - `OcrFallback.kt` - fallback ML Kit com MediaProjection
+- `Work.kt` - cronometro de trabalho e estatisticas (dia/semana/mes)
+- `WorkOverlay.kt` - card flutuante do cronometro com campo de valor
+- `GanhoSync.kt` - envia o ganho do dia ao painel (Supabase) via WebView autenticada
 - `RideForegroundService.kt` - servico em primeiro plano
 - `MainActivity.kt` + `ui/` - interface escura (verde #31F900, rosa #C864AF)

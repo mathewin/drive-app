@@ -57,6 +57,26 @@ class Prefs(context: Context) {
         get() = sp.getBoolean("monitor_on", false)
         set(v) = sp.edit().putBoolean("monitor_on", v).apply()
 
+    var workPanelOn: Boolean
+        get() = sp.getBoolean("work_panel_on", false)
+        set(v) = sp.edit().putBoolean("work_panel_on", v).apply()
+
+    var workPosX: Int
+        get() = sp.getInt("work_x", Int.MIN_VALUE)
+        set(v) = sp.edit().putInt("work_x", v).apply()
+
+    var workPosY: Int
+        get() = sp.getInt("work_y", Int.MIN_VALUE)
+        set(v) = sp.edit().putInt("work_y", v).apply()
+
+    var workOpacity: Float
+        get() = sp.getFloat("work_opac", 1f)
+        set(v) = sp.edit().putFloat("work_opac", v).apply()
+
+    var workFontSize: Float
+        get() = sp.getFloat("work_font", 13f)
+        set(v) = sp.edit().putFloat("work_font", v).apply()
+
     var darkMode: Boolean
         get() = sp.getBoolean("dark_mode", true)
         set(v) = sp.edit().putBoolean("dark_mode", v).apply()

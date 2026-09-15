@@ -48,6 +48,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.calculadoraganhos.AppState
@@ -58,6 +59,8 @@ import com.example.calculadoraganhos.OcrFallback
 import com.example.calculadoraganhos.OverlayManager
 import com.example.calculadoraganhos.ParsingUtils
 import com.example.calculadoraganhos.Prefs
+import com.example.calculadoraganhos.Work
+import com.example.calculadoraganhos.WorkOverlay
 import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -75,7 +78,9 @@ fun DriveWinApp(
     requestCapture: () -> Unit,
     requestNotif: () -> Unit,
     requestStorage: () -> Unit,
-    testNotif: () -> Unit
+    testNotif: () -> Unit,
+    toggleWork: (Boolean) -> Unit,
+    resetWork: () -> Unit
 ) {
     var tab by remember { mutableIntStateOf(0) }
     var motoristaMode by remember { mutableStateOf(false) }
@@ -120,7 +125,7 @@ fun DriveWinApp(
                 0 -> LeituraScreen(
                     Modifier.padding(padding),
                     openA11y, openOverlay, openBattery, startMonitor, stopMonitor, testOverlay,
-                    requestNotif, requestStorage, testNotif
+                    requestNotif, requestStorage, testNotif, toggleWork, resetWork
                 )
                 1 -> MetasScreen(
                     Modifier.padding(padding),
@@ -146,7 +151,9 @@ private fun LeituraScreen(
     testOverlay: () -> Unit,
     requestNotif: () -> Unit,
     requestStorage: () -> Unit,
-    testNotif: () -> Unit
+    testNotif: () -> Unit,
+    toggleWork: (Boolean) -> Unit,
+    resetWork: () -> Unit
 ) {
     val ctx = LocalContext.current
     var tick by remember { mutableIntStateOf(0) }
@@ -188,6 +195,32 @@ private fun LeituraScreen(
             on = on,
             pending = monitorFlag && !(a11y && overlay),
             onChecked = { if (it) startMonitor() else stopMonitor() }
+        )
+
+        Spacer(Modifier.height(24.dp))
+        SectionTitle("TRABALHO (CRONOMETRO)")
+        Spacer(Modifier.height(8.dp))
+        ToggleRow("Painel de trabalho na tela", prefs.workPanelOn) { toggleWork(it) }
+        Spacer(Modifier.height(8.dp))
+        WorkStatsCard(ctx, tick)
+        Spacer(Modifier.height(8.dp))
+        Button(
+            onClick = {
+                resetWork()
+                tick++
+            },
+            modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                contentColor = MaterialTheme.colorScheme.secondary
+            )
+        ) {
+            Text("ZERAR CRONOMETRO", fontWeight = FontWeight.Bold)
+        }
+        Spacer(Modifier.height(6.dp))
+        Text(
+            "O card fica sobre a tela da Uber/99. Arraste pra qualquer canto, use INICIAR/PAUSAR/ZERAR e informe o valor que fez: ele vai pro rank do dia no painel.",
+            color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp
         )
 
         Spacer(Modifier.height(24.dp))
@@ -554,6 +587,30 @@ private fun MetasScreen(
         }
         ToggleRow("Alerta sonoro + vibracao", prefs.overlayAlert) { prefs.overlayAlert = it }
 
+        Spacer(Modifier.height(16.dp))
+        Text("CARD DE TRABALHO", color = MaterialTheme.colorScheme.secondary, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(8.dp))
+        SliderSection(
+            label = "Opacidade do cronometro",
+            format = { it.toInt().toString() + "%" },
+            value = prefs.workOpacity * 100,
+            range = 30f..100f,
+            onValue = {
+                prefs.workOpacity = it / 100f
+                WorkOverlay.refresh(ctx)
+            }
+        )
+        SliderSection(
+            label = "Fonte do cronometro",
+            format = { it.toInt().toString() },
+            value = prefs.workFontSize,
+            range = 10f..20f,
+            onValue = {
+                prefs.workFontSize = it
+                WorkOverlay.refresh(ctx)
+            }
+        )
+
         Spacer(Modifier.height(24.dp))
         Text("OCR (LEITURA POR IMAGEM)", color = MaterialTheme.colorScheme.secondary, fontSize = 13.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(4.dp))
@@ -856,6 +913,105 @@ private fun HistoryScreen(modifier: Modifier = Modifier) {
                 Spacer(Modifier.height(24.dp))
             }
         }
+    }
+}
+
+@Composable
+private fun WorkStatsCard(ctx: Context, tick: Int) {
+    val secToday = remember(tick) { Work.secondsToday(ctx) }
+    val secWeek = remember(tick) { Work.secondsWeek(ctx) }
+    val secMonth = remember(tick) { Work.secondsMonth(ctx) }
+    val earToday = remember(tick) { Work.earningsToday(ctx) }
+    val earWeek = remember(tick) { Work.earningsWeek(ctx) }
+    val earMonth = remember(tick) { Work.earningsMonth(ctx) }
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(12.dp))
+            .padding(14.dp)
+    ) {
+        Column(Modifier.fillMaxWidth()) {
+            Row(Modifier.fillMaxWidth()) {
+                Text(
+                    "",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 11.sp,
+                    modifier = Modifier.weight(1f)
+                )
+                Text(
+                    "HOJE",
+                    color = MaterialTheme.colorScheme.secondary,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.End,
+                    modifier = Modifier.weight(1f)
+                )
+                Text(
+                    "SEMANA",
+                    color = MaterialTheme.colorScheme.secondary,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.End,
+                    modifier = Modifier.weight(1f)
+                )
+                Text(
+                    "MES",
+                    color = MaterialTheme.colorScheme.secondary,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.End,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+            Spacer(Modifier.height(8.dp))
+            WorkStatRow(
+                "TEMPO",
+                Work.formatHuman(secToday),
+                Work.formatHuman(secWeek),
+                Work.formatHuman(secMonth)
+            )
+            Spacer(Modifier.height(4.dp))
+            WorkStatRow(
+                "GANHO",
+                ParsingUtils.formatMoney(earToday),
+                ParsingUtils.formatMoney(earWeek),
+                ParsingUtils.formatMoney(earMonth)
+            )
+        }
+    }
+}
+
+@Composable
+private fun WorkStatRow(label: String, hoje: String, semana: String, mes: String) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            label,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontSize = 11.sp,
+            modifier = Modifier.weight(1f)
+        )
+        Text(
+            hoje,
+            color = MaterialTheme.colorScheme.primary,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.End,
+            modifier = Modifier.weight(1f)
+        )
+        Text(
+            semana,
+            color = MaterialTheme.colorScheme.onSurface,
+            fontSize = 12.sp,
+            textAlign = TextAlign.End,
+            modifier = Modifier.weight(1f)
+        )
+        Text(
+            mes,
+            color = MaterialTheme.colorScheme.onSurface,
+            fontSize = 12.sp,
+            textAlign = TextAlign.End,
+            modifier = Modifier.weight(1f)
+        )
     }
 }
 

@@ -8,6 +8,7 @@ import android.graphics.Rect
 import android.os.Build
 import android.os.Handler
 import android.os.HandlerThread
+import android.provider.Settings
 import android.util.Log
 import android.view.Display
 import android.view.accessibility.AccessibilityEvent
@@ -431,6 +432,9 @@ class CalculatorService : AccessibilityService() {
         } else {
             DriveWinLog.log("calc", "monitor DESLIGADO - sem leitura")
         }
+        if (Prefs(this).workPanelOn && Settings.canDrawOverlays(this)) {
+            WorkOverlay.show(this)
+        }
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
@@ -469,6 +473,10 @@ class CalculatorService : AccessibilityService() {
         OverlayManager.onCardClosed = null
         stopScanner()
         OverlayManager.hide()
+        try {
+            Work.save(this)
+        } catch (_: Exception) {
+        }
         try {
             RideForegroundService.stop(this)
         } catch (_: Exception) {

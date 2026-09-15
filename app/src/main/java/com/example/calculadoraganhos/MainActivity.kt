@@ -155,14 +155,49 @@ class MainActivity : ComponentActivity() {
                     requestCapture = { requestCapture() },
                     requestNotif = { ensureNotifPerm() },
                     requestStorage = { ensureStoragePerm() },
-                    testNotif = { testNotifCard() }
+                    testNotif = { testNotifCard() },
+                    toggleWork = { on -> toggleWork(on) },
+                    resetWork = { Work.resetTimer(this) }
                 )
             }
+        }
+        val earned = Work.earningsToday(this)
+        if (earned > 0.0) {
+            GanhoSync.push(this, Work.key(), earned, null)
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (Prefs(this).workPanelOn && Settings.canDrawOverlays(this)) {
+            WorkOverlay.show(this)
         }
     }
 
     override fun onDestroy() {
+        Work.save(this)
         super.onDestroy()
+    }
+
+    private fun toggleWork(on: Boolean) {
+        if (on) {
+            if (!Settings.canDrawOverlays(this)) {
+                toast("Permita a sobreposicao do DriveWin")
+                startActivity(
+                    Intent(
+                        Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                        Uri.parse("package:$packageName")
+                    )
+                )
+                return
+            }
+            Prefs(this).workPanelOn = true
+            WorkOverlay.show(this)
+            toast("Painel de trabalho na tela")
+        } else {
+            Prefs(this).workPanelOn = false
+            WorkOverlay.hide()
+        }
     }
 
     private fun toggleMonitor(on: Boolean) {
@@ -191,6 +226,7 @@ class MainActivity : ComponentActivity() {
             ensureNotifPerm()
             if (Prefs(this).printAuto) ensureStoragePerm()
             RideForegroundService.start(this)
+            if (Prefs(this).workPanelOn) WorkOverlay.show(this)
             toast("Monitoramento LIGADO - abra a Uber ou a 99")
         } else {
             Prefs(this).monitorOn = false
