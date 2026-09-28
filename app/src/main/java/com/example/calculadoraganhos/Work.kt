@@ -157,6 +157,10 @@ object Work {
         ensure(ctx)
         tick(ctx)
         synchronized(lock) {
+            val today = key()
+            val had = secondsMap[today] ?: 0L
+            val cut = sessionMs.coerceAtLeast(0L)
+            secondsMap[today] = (had - cut).coerceAtLeast(0L)
             sessionMs = 0L
             running = false
             lastElapsed = SystemClock.elapsedRealtime()
@@ -237,14 +241,14 @@ object Work {
 
     fun secondsOn(ctx: Context, k: String): Long {
         ensure(ctx)
-        synchronized(lock) { return secondsMap[k] ?: 0L }
+        synchronized(lock) { return ((secondsMap[k] ?: 0L) / 1000L) }
     }
 
     fun earningsToday(ctx: Context): Double = earningsOn(ctx, key())
 
     fun secondsToday(ctx: Context): Long {
         tick(ctx)
-        return secondsOn(ctx, key())
+        return clockMs(ctx) / 1000L
     }
 
     fun earningsWeek(ctx: Context): Double = sumEarnings(ctx, weekKeys())
@@ -304,7 +308,7 @@ object Work {
         synchronized(lock) {
             keys.forEach { total += secondsMap[it] ?: 0L }
         }
-        return total
+        return total / 1000L
     }
 
     fun formatClock(ms: Long): String {

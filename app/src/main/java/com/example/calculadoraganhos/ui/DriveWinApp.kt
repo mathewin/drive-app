@@ -926,6 +926,7 @@ private fun WorkStatsCard(ctx: Context, tick: Int) {
     val secToday = remember(tick) { Work.secondsToday(ctx) }
     val secWeek = remember(tick) { Work.secondsWeek(ctx) }
     val secMonth = remember(tick) { Work.secondsMonth(ctx) }
+    val clockToday = remember(tick) { Work.formatClock(Work.clockMs(ctx)) }
     val earToday = remember(tick) { Work.earningsToday(ctx) }
     val earWeek = remember(tick) { Work.earningsWeek(ctx) }
     val earMonth = remember(tick) { Work.earningsMonth(ctx) }
@@ -971,7 +972,7 @@ private fun WorkStatsCard(ctx: Context, tick: Int) {
             Spacer(Modifier.height(8.dp))
             WorkStatRow(
                 "TEMPO",
-                Work.formatHuman(secToday),
+                clockToday,
                 Work.formatHuman(secWeek),
                 Work.formatHuman(secMonth)
             )
