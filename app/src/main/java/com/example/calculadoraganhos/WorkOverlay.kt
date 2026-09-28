@@ -42,6 +42,7 @@ object WorkOverlay {
     private var valueField: EditText? = null
     private var controlsRow: LinearLayout? = null
     private var valueEditRow: LinearLayout? = null
+    private var valueButtonsRow: LinearLayout? = null
 
     private var ctxRef: Context? = null
     private var density = 1f
@@ -190,23 +191,40 @@ object WorkOverlay {
                 isFocusableInTouchMode = true
                 setOnEditorActionListener { _, actionId, _ ->
                     if (actionId == EditorInfo.IME_ACTION_DONE) {
-                        submit(ctx)
+                        submit(ctx, replace = false)
                         true
                     } else {
                         false
                     }
                 }
             }
-            editRow.addView(valueField, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-            val ok = button(ctx, "OK", COLOR_ROSA, COLOR_BG).apply {
-                setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
-                setPadding(dp(16), dp(12), dp(16), dp(12))
-                setOnClickListener { submit(ctx) }
+            editRow.addView(valueField, LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ))
+            root.addView(editRow, topParams(dp(6)))
+
+            val actionRow = LinearLayout(ctx).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER
+                visibility = View.GONE
             }
-            editRow.addView(ok, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+            valueButtonsRow = actionRow
+            val ok = button(ctx, "SOMAR", COLOR_VERDE, COLOR_BG).apply {
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+                setPadding(dp(12), dp(10), dp(12), dp(10))
+                setOnClickListener { submit(ctx, replace = false) }
+            }
+            actionRow.addView(ok, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+            val corr = button(ctx, "CORRIGIR", COLOR_ROSA, COLOR_BG).apply {
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+                setPadding(dp(12), dp(10), dp(12), dp(10))
+                setOnClickListener { submit(ctx, replace = true) }
+            }
+            actionRow.addView(corr, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
                 leftMargin = dp(8)
             })
-            root.addView(editRow, topParams(dp(6)))
+            root.addView(actionRow, topParams(dp(6)))
 
             applyStyle(ctx)
             val p = buildParams(ctx)
@@ -237,6 +255,7 @@ object WorkOverlay {
         valueField = null
         controlsRow = null
         valueEditRow = null
+        valueButtonsRow = null
         if (v != null) {
             try {
                 wm?.removeView(v)
@@ -255,18 +274,20 @@ object WorkOverlay {
         if (editing) return
         valueText?.visibility = View.GONE
         valueEditRow?.visibility = View.VISIBLE
+        valueButtonsRow?.visibility = View.VISIBLE
         valueField?.setText("")
         enterEdit(ctx)
     }
 
     private fun closeValueEditor(ctx: Context) {
         valueEditRow?.visibility = View.GONE
+        valueButtonsRow?.visibility = View.GONE
         valueText?.visibility = View.VISIBLE
         exitEdit(ctx)
         updateValue(ctx)
     }
 
-    private fun submit(ctx: Context) {
+    private fun submit(ctx: Context, replace: Boolean) {
         val raw = valueField?.text?.toString()?.trim()?.replace(',', '.') ?: ""
         if (raw.isEmpty()) {
             closeValueEditor(ctx)
@@ -277,7 +298,7 @@ object WorkOverlay {
             closeValueEditor(ctx)
             return
         }
-        val total = Work.applyEarning(ctx, v)
+        val total = if (replace) Work.setEarning(ctx, v) else Work.addEarning(ctx, v)
         valueField?.setText("")
         closeValueEditor(ctx)
         GanhoSync.push(ctx, Work.key(), total, null)
