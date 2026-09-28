@@ -77,6 +77,10 @@ class Prefs(context: Context) {
         get() = sp.getFloat("work_font", 13f)
         set(v) = sp.edit().putFloat("work_font", v).apply()
 
+    var workBgOn: Boolean
+        get() = sp.getBoolean("work_bg_on", false)
+        set(v) = sp.edit().putBoolean("work_bg_on", v).apply()
+
     var darkMode: Boolean
         get() = sp.getBoolean("dark_mode", true)
         set(v) = sp.edit().putBoolean("dark_mode", v).apply()

@@ -124,6 +124,7 @@ object WorkOverlay {
                 typeface = Typeface.MONOSPACE
                 gravity = Gravity.CENTER
                 setPadding(dp(4), dp(2), dp(4), dp(2))
+                setShadowLayer(4f, 0f, 1f, 0xCC000000.toInt())
                 isClickable = true
                 setOnTouchListener(tapOrDrag { toggleControls() })
             }
@@ -161,6 +162,7 @@ object WorkOverlay {
             valueText = text(ctx, ParsingUtils.formatMoney(0.0), 22f, COLOR_VERDE, true).apply {
                 gravity = Gravity.CENTER
                 setPadding(dp(4), dp(6), dp(4), dp(2))
+                setShadowLayer(4f, 0f, 1f, 0xCC000000.toInt())
                 isClickable = true
                 setOnTouchListener(tapOrDrag { openValueEditor(ctx) })
             }
@@ -313,7 +315,13 @@ object WorkOverlay {
     private fun applyStyle(ctx: Context) {
         val v = view ?: return
         val prefs = Prefs(ctx)
-        v.background = rounded(dp(14), COLOR_BG, dp(2), COLOR_VERDE)
+        if (prefs.workBgOn) {
+            v.background = rounded(dp(14), COLOR_BG, 0, 0)
+            v.setPadding(dp(14), dp(10), dp(14), dp(10))
+        } else {
+            v.background = null
+            v.setPadding(dp(4), dp(2), dp(4), dp(2))
+        }
         v.alpha = prefs.workOpacity
         val scale = prefs.workFontSize / 13f
         timerText?.setTextSize(TypedValue.COMPLEX_UNIT_SP, 26f * scale)

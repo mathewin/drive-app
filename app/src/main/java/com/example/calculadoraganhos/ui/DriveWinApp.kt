@@ -590,6 +590,11 @@ private fun MetasScreen(
         Spacer(Modifier.height(16.dp))
         Text("CARD DE TRABALHO", color = MaterialTheme.colorScheme.secondary, fontSize = 13.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(8.dp))
+        ToggleRow("Fundo no cronometro", prefs.workBgOn) {
+            prefs.workBgOn = it
+            WorkOverlay.refresh(ctx)
+        }
+        Spacer(Modifier.height(8.dp))
         SliderSection(
             label = "Opacidade do cronometro",
             format = { it.toInt().toString() + "%" },
