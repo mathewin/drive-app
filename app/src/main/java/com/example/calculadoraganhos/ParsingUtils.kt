@@ -53,6 +53,10 @@ object ParsingUtils {
         RegexOption.IGNORE_CASE
     )
     private val RE_PER_KM = Regex("R\\$\\s*[0-9][0-9.,]*\\s*(?:/|por)\\s*km", RegexOption.IGNORE_CASE)
+    private val RE_PER_KM_VALUE = Regex(
+        "R\\$\\s*([0-9][0-9.,]*)\\s*(?:/|por)\\s*km",
+        RegexOption.IGNORE_CASE
+    )
     private val RE_PER_H = Regex("R\\$\\s*[0-9][0-9.,]*\\s*(?:/|por)\\s*h(?:ora)?", RegexOption.IGNORE_CASE)
     private val RE_KM = Regex("([0-9]+(?:[.,][0-9]+)?)\\s*km", RegexOption.IGNORE_CASE)
     private val RE_METER = Regex("([0-9]+(?:[.,][0-9]+)?)\\s*m(?!in|i)", RegexOption.IGNORE_CASE)
@@ -132,6 +136,15 @@ object ParsingUtils {
         if (l == "trabalho" || l == "pausar" || l == "zerar" || l == "iniciar" || l == "ok" || l == "valor") return true
         if (l == "perfil premium" || l == "verificado") return true
         return false
+    }
+
+    fun statedPerKm(texts: List<String>): Double? {
+        for (t in texts) {
+            val m = RE_PER_KM_VALUE.find(t) ?: continue
+            val v = toDouble(m.groupValues[1])
+            if (v > 0) return v
+        }
+        return null
     }
 
     fun offerItems(items: List<TextItem>): List<TextItem> {

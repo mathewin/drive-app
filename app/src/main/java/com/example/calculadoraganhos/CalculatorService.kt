@@ -594,6 +594,7 @@ class CalculatorService : AccessibilityService() {
         DriveWinLog.log(
             "calc",
             "MOSTRANDO CARD: $app R\$${data.fare} ${data.totalDistanceKm}km ${data.totalTimeMin}min" +
+                (if (card.confirmed) " rkm confirmado" else "") +
                 (if (card.pickup != null) " EMB:${card.pickup}" else "") +
                 (if (card.dropoff != null) " DESC:${card.dropoff}" else "")
         )

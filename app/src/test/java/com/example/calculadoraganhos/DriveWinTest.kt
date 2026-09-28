@@ -151,6 +151,7 @@ class DriveWinTest {
         assertEquals(39.0, card.data.tripMin, 0.001)
         assertEquals(47.0, card.data.totalTimeMin, 0.001)
         assertEquals("4,94", card.passenger)
+        assertTrue(card.confirmed)
     }
 
     @Test
@@ -179,5 +180,38 @@ class DriveWinTest {
         assertEquals(18.0, card.data.tripMin, 0.001)
         assertEquals(23.0, card.data.totalTimeMin, 0.001)
         assertEquals("4,90", card.passenger)
+        assertTrue(card.confirmed)
+    }
+
+    @Test
+    fun perKmOnCardConfirmsCalculation() {
+        val card = UberParser.parse(
+            listOf(
+                item("R\$ 26,02"),
+                item("R\$1,06/km aprox."),
+                item("8 min (3.1 km)"),
+                item("39 minutos (21.4 km)"),
+                item("Selecionar")
+            )
+        )
+        assertNotNull(card)
+        assertTrue(card!!.confirmed)
+        assertEquals(false, card.suspicious)
+    }
+
+    @Test
+    fun noPerKmOnCardStillParses() {
+        val card = UberParser.parse(
+            listOf(
+                item("R\$ 19,59"),
+                item("8 min (3.1 km)"),
+                item("18 min (8.5 km)"),
+                item("Aceitar")
+            )
+        )
+        assertNotNull(card)
+        assertEquals(false, card!!.confirmed)
+        assertEquals(19.59, card.data.fare, 0.001)
+        assertEquals(11.6, card.data.totalDistanceKm, 0.001)
     }
 }

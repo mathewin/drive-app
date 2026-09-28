@@ -19,9 +19,12 @@ abstract class CardParserBase {
         val data = RideData(fare, pickupKm, tripKm, totalKm, pickupMin, tripMin, totalMin)
         if (data.totalDistanceKm <= 0 && data.totalTimeMin <= 0) return null
         val addr = AddressFinder.extract(offer)
+        val check = Validator.confirmPerKm(data, ParsingUtils.statedPerKm(items.map { it.text }))
         return ParsedCard(
             data,
-            suspicious = Validator.suspicious(data),
+            confidence = if (check.confirmed) 1.0 else if (check.mismatch) 0.75 else 1.0,
+            suspicious = Validator.suspicious(data) || check.mismatch,
+            confirmed = check.confirmed,
             passenger = ParsingUtils.passengerRating(texts),
             pickup = addr.pickup,
             dropoff = addr.dropoff

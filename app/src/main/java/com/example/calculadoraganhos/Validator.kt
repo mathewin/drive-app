@@ -2,8 +2,23 @@ package com.example.calculadoraganhos
 
 object Validator {
 
+    data class PerKmCheck(val confirmed: Boolean, val mismatch: Boolean)
+
     fun isValid(data: RideData): Boolean =
         data.fare > 0 && data.totalDistanceKm > 0 && data.totalTimeMin > 0
+
+    fun confirmPerKm(data: RideData, stated: Double?): PerKmCheck {
+        if (stated == null || stated <= 0) return PerKmCheck(confirmed = false, mismatch = false)
+        val km = data.totalDistanceKm
+        if (km <= 0 || data.fare <= 0) return PerKmCheck(confirmed = false, mismatch = false)
+        val calc = data.fare / km
+        val gap = kotlin.math.abs(calc - stated) / kotlin.math.max(calc, stated)
+        return if (gap <= 0.12) {
+            PerKmCheck(confirmed = true, mismatch = false)
+        } else {
+            PerKmCheck(confirmed = false, mismatch = true)
+        }
+    }
 
     fun suspicious(data: RideData): Boolean {
         if (data.fare <= 0) return true
