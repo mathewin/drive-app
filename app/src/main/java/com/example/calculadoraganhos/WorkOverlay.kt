@@ -20,9 +20,9 @@ import kotlin.math.abs
 import kotlin.math.roundToInt
 
 /**
- * Card flutuante de trabalho: cronometro (iniciar / pausar / zerar) e campo
- * onde o motorista informa o valor que fez. Fica sobre a tela do app de corrida,
- * pode ser arrastado pra qualquer canto e lembra a posicao.
+ * Card flutuante compacto: so cronometro e valor em verde.
+ * Toque no cronometro abre INICIAR/PAUSAR e ZERAR.
+ * Toque no valor abre o campo grande de digitacao e OK.
  */
 object WorkOverlay {
 
@@ -31,17 +31,17 @@ object WorkOverlay {
     private val COLOR_ROSA = 0xFFC864AF.toInt()
     private val COLOR_BRANCO = 0xFFFFFFFF.toInt()
     private val COLOR_CINZA = 0xFFC8C8C8.toInt()
-    private val COLOR_CINZA2 = 0xFF888888.toInt()
     private val COLOR_FUNDO2 = 0xFF22242B.toInt()
 
     private var wm: WindowManager? = null
     private var view: LinearLayout? = null
     private var params: WindowManager.LayoutParams? = null
     private var timerText: TextView? = null
-    private var summaryText: TextView? = null
-    private var statusText: TextView? = null
+    private var valueText: TextView? = null
     private var mainButton: TextView? = null
     private var valueField: EditText? = null
+    private var controlsRow: LinearLayout? = null
+    private var valueEditRow: LinearLayout? = null
 
     private var ctxRef: Context? = null
     private var density = 1f
@@ -62,7 +62,7 @@ object WorkOverlay {
                     if (Work.isRunning(ctx)) Work.tick(ctx)
                     timerText?.text = Work.formatClock(Work.clockMs(ctx))
                     mainButton?.text = if (Work.isRunning(ctx)) "PAUSAR" else "INICIAR"
-                    updateSummary(ctx)
+                    if (!editing) updateValue(ctx)
                 } catch (_: Exception) {
                 }
             }
@@ -95,7 +95,7 @@ object WorkOverlay {
             val ctx = context.applicationContext
             val v = view ?: return@runOnMain
             applyStyle(ctx)
-            updateSummary(ctx)
+            updateValue(ctx)
             mainButton?.text = if (Work.isRunning(ctx)) "PAUSAR" else "INICIAR"
             try {
                 wm?.updateViewLayout(v, params)
@@ -116,36 +116,25 @@ object WorkOverlay {
             wm = w
             val root = LinearLayout(ctx).apply {
                 orientation = LinearLayout.VERTICAL
-                setPadding(dp(12), dp(8), dp(12), dp(8))
+                setPadding(dp(14), dp(10), dp(14), dp(10))
                 setOnTouchListener(overlayTouch)
             }
 
-            val header = LinearLayout(ctx).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER_VERTICAL
-            }
-            header.addView(text(ctx, "TRABALHO", 10f, COLOR_ROSA, true))
-            header.addView(View(ctx), LinearLayout.LayoutParams(0, 1, 1f))
-            val close = text(ctx, "\u00D7", 14f, COLOR_CINZA2, true).apply {
-                setPadding(dp(8), 0, dp(2), dp(2))
-                isClickable = true
-                setOnClickListener {
-                    Prefs(ctx).workPanelOn = false
-                    hideOnMain()
-                }
-            }
-            header.addView(close)
-            root.addView(header)
-
-            timerText = text(ctx, "00:00:00", 24f, COLOR_VERDE, true).apply {
+            timerText = text(ctx, "00:00:00", 26f, COLOR_VERDE, true).apply {
                 typeface = Typeface.MONOSPACE
+                gravity = Gravity.CENTER
+                setPadding(dp(4), dp(2), dp(4), dp(2))
+                isClickable = true
+                setOnTouchListener(tapOrDrag { toggleControls() })
             }
-            root.addView(timerText, topParams(dp(2)))
+            root.addView(timerText)
 
             val buttons = LinearLayout(ctx).apply {
                 orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER_VERTICAL
+                gravity = Gravity.CENTER
+                visibility = View.GONE
             }
+            controlsRow = buttons
             mainButton = button(ctx, "INICIAR", COLOR_VERDE, COLOR_BG).apply {
                 setOnClickListener {
                     if (Work.isRunning(ctx)) {
@@ -162,35 +151,41 @@ object WorkOverlay {
                     Work.resetTimer(ctx)
                     timerText?.text = Work.formatClock(0L)
                     mainButton?.text = "INICIAR"
-                    updateSummary(ctx)
                 }
             }
             buttons.addView(reset, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
-                leftMargin = dp(6)
+                leftMargin = dp(8)
             })
-            root.addView(buttons, topParams(dp(6)))
+            root.addView(buttons, topParams(dp(8)))
 
-            val valueRow = LinearLayout(ctx).apply {
+            valueText = text(ctx, ParsingUtils.formatMoney(0.0), 22f, COLOR_VERDE, true).apply {
+                gravity = Gravity.CENTER
+                setPadding(dp(4), dp(6), dp(4), dp(2))
+                isClickable = true
+                setOnTouchListener(tapOrDrag { openValueEditor(ctx) })
+            }
+            root.addView(valueText, topParams(dp(4)))
+
+            val editRow = LinearLayout(ctx).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
+                visibility = View.GONE
             }
-            valueRow.addView(text(ctx, "R\$", 14f, COLOR_VERDE, true).apply {
-                setPadding(dp(2), 0, dp(6), 0)
-            })
+            valueEditRow = editRow
             valueField = EditText(ctx).apply {
                 inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL
                 imeOptions = EditorInfo.IME_ACTION_DONE
-                hint = "valor"
-                setHintTextColor(COLOR_CINZA2)
-                setTextColor(COLOR_BRANCO)
-                textSize = 15f
+                hint = "0,00"
+                setHintTextColor(0xFF555555.toInt())
+                setTextColor(COLOR_VERDE)
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 22f)
+                typeface = Typeface.DEFAULT_BOLD
                 isSingleLine = true
                 setSelectAllOnFocus(true)
-                background = rounded(dp(6), COLOR_FUNDO2, 0, 0)
-                setPadding(dp(8), dp(6), dp(8), dp(6))
+                background = rounded(dp(10), COLOR_FUNDO2, dp(1), COLOR_VERDE)
+                setPadding(dp(14), dp(12), dp(14), dp(12))
+                minHeight = dp(48)
                 isFocusableInTouchMode = true
-                setOnClickListener { enterEdit(ctx) }
-                setOnFocusChangeListener { _, hasFocus -> if (!hasFocus) exitEdit(ctx) }
                 setOnEditorActionListener { _, actionId, _ ->
                     if (actionId == EditorInfo.IME_ACTION_DONE) {
                         submit(ctx)
@@ -200,27 +195,23 @@ object WorkOverlay {
                     }
                 }
             }
-            valueRow.addView(valueField, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+            editRow.addView(valueField, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
             val ok = button(ctx, "OK", COLOR_ROSA, COLOR_BG).apply {
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
+                setPadding(dp(16), dp(12), dp(16), dp(12))
                 setOnClickListener { submit(ctx) }
             }
-            valueRow.addView(ok, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
-                leftMargin = dp(6)
+            editRow.addView(ok, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                leftMargin = dp(8)
             })
-            root.addView(valueRow, topParams(dp(6)))
-
-            summaryText = text(ctx, "", 10f, COLOR_CINZA, false)
-            root.addView(summaryText, topParams(dp(6)))
-
-            statusText = text(ctx, "", 10f, COLOR_ROSA, false)
-            root.addView(statusText, topParams(dp(2)))
+            root.addView(editRow, topParams(dp(6)))
 
             applyStyle(ctx)
             val p = buildParams(ctx)
             w.addView(root, p)
             view = root
             params = p
-            updateSummary(ctx)
+            updateValue(ctx)
             timerText?.text = Work.formatClock(Work.clockMs(ctx))
             mainButton?.text = if (Work.isRunning(ctx)) "PAUSAR" else "INICIAR"
             main.removeCallbacks(ticker)
@@ -239,10 +230,11 @@ object WorkOverlay {
         view = null
         params = null
         timerText = null
-        summaryText = null
-        statusText = null
+        valueText = null
         mainButton = null
         valueField = null
+        controlsRow = null
+        valueEditRow = null
         if (v != null) {
             try {
                 wm?.removeView(v)
@@ -252,21 +244,37 @@ object WorkOverlay {
         DriveWinLog.log("work", "painel de trabalho oculto")
     }
 
+    private fun toggleControls() {
+        val row = controlsRow ?: return
+        row.visibility = if (row.visibility == View.VISIBLE) View.GONE else View.VISIBLE
+    }
+
+    private fun openValueEditor(ctx: Context) {
+        if (editing) return
+        valueText?.visibility = View.GONE
+        valueEditRow?.visibility = View.VISIBLE
+        valueField?.setText("")
+        enterEdit(ctx)
+    }
+
+    private fun closeValueEditor(ctx: Context) {
+        valueEditRow?.visibility = View.GONE
+        valueText?.visibility = View.VISIBLE
+        exitEdit(ctx)
+        updateValue(ctx)
+    }
+
     private fun submit(ctx: Context) {
         val raw = valueField?.text?.toString()?.trim()?.replace(',', '.') ?: ""
         val v = raw.toDoubleOrNull()
         if (v == null || v <= 0.0) {
-            setStatus("digite um valor valido")
+            closeValueEditor(ctx)
             return
         }
         val total = Work.addEarning(ctx, v)
         valueField?.setText("")
-        exitEdit(ctx)
-        updateSummary(ctx)
-        setStatus("enviando " + ParsingUtils.formatMoney(v) + "...")
-        GanhoSync.push(ctx, Work.key(), total) { ok, msg ->
-            setStatus(if (ok) "no ar: " + ParsingUtils.formatMoney(total) else msg)
-        }
+        closeValueEditor(ctx)
+        GanhoSync.push(ctx, Work.key(), total, null)
     }
 
     private fun enterEdit(ctx: Context) {
@@ -298,25 +306,67 @@ object WorkOverlay {
         }
     }
 
-    private fun updateSummary(ctx: Context) {
-        val t = Work.secondsToday(ctx)
-        val e = Work.earningsToday(ctx)
-        summaryText?.text = "Hoje " + Work.formatHuman(t) + " \u00B7 " + ParsingUtils.formatMoney(e)
-    }
-
-    private fun setStatus(msg: String) {
-        statusText?.text = msg
+    private fun updateValue(ctx: Context) {
+        valueText?.text = ParsingUtils.formatMoney(Work.earningsToday(ctx))
     }
 
     private fun applyStyle(ctx: Context) {
         val v = view ?: return
         val prefs = Prefs(ctx)
-        v.background = rounded(dp(14), COLOR_BG, dp(2), COLOR_ROSA)
+        v.background = rounded(dp(14), COLOR_BG, dp(2), COLOR_VERDE)
         v.alpha = prefs.workOpacity
         val scale = prefs.workFontSize / 13f
-        timerText?.setTextSize(TypedValue.COMPLEX_UNIT_SP, 24f * scale)
-        summaryText?.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10f * scale)
-        statusText?.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10f * scale)
+        timerText?.setTextSize(TypedValue.COMPLEX_UNIT_SP, 26f * scale)
+        valueText?.setTextSize(TypedValue.COMPLEX_UNIT_SP, 22f * scale)
+        valueField?.setTextSize(TypedValue.COMPLEX_UNIT_SP, 22f * scale)
+    }
+
+    private fun tapOrDrag(onTap: () -> Unit): View.OnTouchListener {
+        return View.OnTouchListener { _, ev ->
+            val p = params ?: return@OnTouchListener false
+            val root = view ?: return@OnTouchListener false
+            when (ev.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    lastX = ev.rawX
+                    lastY = ev.rawY
+                    downX = ev.rawX
+                    downY = ev.rawY
+                    dragging = false
+                    true
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    val dx = ev.rawX - lastX
+                    val dy = ev.rawY - lastY
+                    if (!dragging && (abs(ev.rawX - downX) > dp(10).toFloat() || abs(ev.rawY - downY) > dp(10).toFloat())) {
+                        dragging = true
+                    }
+                    if (dragging) {
+                        p.x += dx.roundToInt()
+                        p.y += dy.roundToInt()
+                        lastX = ev.rawX
+                        lastY = ev.rawY
+                        try {
+                            wm?.updateViewLayout(root, p)
+                        } catch (_: Exception) {
+                        }
+                    }
+                    true
+                }
+                MotionEvent.ACTION_UP -> {
+                    if (dragging) {
+                        val ctx = root.context.applicationContext
+                        val prefs = Prefs(ctx)
+                        prefs.workPosX = p.x
+                        prefs.workPosY = p.y
+                    } else {
+                        onTap()
+                    }
+                    true
+                }
+                MotionEvent.ACTION_CANCEL -> true
+                else -> false
+            }
+        }
     }
 
     private val overlayTouch = View.OnTouchListener { v, ev ->
@@ -409,7 +459,7 @@ object WorkOverlay {
             LinearLayout.LayoutParams.MATCH_PARENT,
             LinearLayout.LayoutParams.WRAP_CONTENT
         ).apply {
-            topMargin = dp(marginDp)
+            topMargin = marginDp
         }
     }
 
