@@ -298,7 +298,13 @@ object WorkOverlay {
             closeValueEditor(ctx)
             return
         }
-        val total = if (add) Work.addEarning(ctx, v) else Work.subtractEarning(ctx, v)
+        val total = if (v == 0.0) {
+            Work.setEarning(ctx, 0.0)
+        } else if (add) {
+            Work.addEarning(ctx, v)
+        } else {
+            Work.subtractEarning(ctx, v)
+        }
         valueField?.setText("")
         closeValueEditor(ctx)
         GanhoSync.push(ctx, Work.key(), total, null)
