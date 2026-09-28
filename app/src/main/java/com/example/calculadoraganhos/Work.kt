@@ -204,6 +204,20 @@ object Work {
         return total
     }
 
+    fun applyEarning(ctx: Context, value: Double): Double {
+        ensure(ctx)
+        if (value < 0.0) return earningsToday(ctx)
+        val total: Double
+        synchronized(lock) {
+            val k = key()
+            val current = earningsMap[k] ?: 0.0
+            total = if (value < current) value else current + value
+            earningsMap[k] = total
+        }
+        persist(ctx)
+        return total
+    }
+
     fun earningsOn(ctx: Context, k: String): Double {
         ensure(ctx)
         synchronized(lock) { return earningsMap[k] ?: 0.0 }

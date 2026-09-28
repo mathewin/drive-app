@@ -255,10 +255,7 @@ object WorkOverlay {
         if (editing) return
         valueText?.visibility = View.GONE
         valueEditRow?.visibility = View.VISIBLE
-        val current = Work.earningsToday(ctx)
-        val shown = if (current > 0.0) String.format(java.util.Locale.US, "%.2f", current) else ""
-        valueField?.setText(shown)
-        valueField?.setSelection(valueField?.text?.length ?: 0)
+        valueField?.setText("")
         enterEdit(ctx)
     }
 
@@ -280,7 +277,7 @@ object WorkOverlay {
             closeValueEditor(ctx)
             return
         }
-        val total = Work.setEarning(ctx, v)
+        val total = Work.applyEarning(ctx, v)
         valueField?.setText("")
         closeValueEditor(ctx)
         GanhoSync.push(ctx, Work.key(), total, null)
