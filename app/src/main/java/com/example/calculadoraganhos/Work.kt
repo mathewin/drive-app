@@ -194,6 +194,18 @@ object Work {
         return total
     }
 
+    fun subtractEarning(ctx: Context, value: Double): Double {
+        ensure(ctx)
+        val total: Double
+        synchronized(lock) {
+            val k = key()
+            total = ((earningsMap[k] ?: 0.0) - value).coerceAtLeast(0.0)
+            earningsMap[k] = total
+        }
+        persist(ctx)
+        return total
+    }
+
     fun setEarning(ctx: Context, value: Double): Double {
         ensure(ctx)
         val total = if (value < 0.0) 0.0 else value

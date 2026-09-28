@@ -191,7 +191,7 @@ object WorkOverlay {
                 isFocusableInTouchMode = true
                 setOnEditorActionListener { _, actionId, _ ->
                     if (actionId == EditorInfo.IME_ACTION_DONE) {
-                        submit(ctx, replace = false)
+                        submit(ctx, add = true)
                         true
                     } else {
                         false
@@ -210,18 +210,18 @@ object WorkOverlay {
                 visibility = View.GONE
             }
             valueButtonsRow = actionRow
-            val ok = button(ctx, "SOMAR", COLOR_VERDE, COLOR_BG).apply {
-                setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
-                setPadding(dp(12), dp(10), dp(12), dp(10))
-                setOnClickListener { submit(ctx, replace = false) }
+            val plus = button(ctx, "+", COLOR_VERDE, COLOR_BG).apply {
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 22f)
+                setPadding(dp(12), dp(8), dp(12), dp(8))
+                setOnClickListener { submit(ctx, add = true) }
             }
-            actionRow.addView(ok, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-            val corr = button(ctx, "CORRIGIR", COLOR_ROSA, COLOR_BG).apply {
-                setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
-                setPadding(dp(12), dp(10), dp(12), dp(10))
-                setOnClickListener { submit(ctx, replace = true) }
+            actionRow.addView(plus, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+            val minus = button(ctx, "\u2212", COLOR_ROSA, COLOR_BG).apply {
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 22f)
+                setPadding(dp(12), dp(8), dp(12), dp(8))
+                setOnClickListener { submit(ctx, add = false) }
             }
-            actionRow.addView(corr, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+            actionRow.addView(minus, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
                 leftMargin = dp(8)
             })
             root.addView(actionRow, topParams(dp(6)))
@@ -287,7 +287,7 @@ object WorkOverlay {
         updateValue(ctx)
     }
 
-    private fun submit(ctx: Context, replace: Boolean) {
+    private fun submit(ctx: Context, add: Boolean) {
         val raw = valueField?.text?.toString()?.trim()?.replace(',', '.') ?: ""
         if (raw.isEmpty()) {
             closeValueEditor(ctx)
@@ -298,7 +298,7 @@ object WorkOverlay {
             closeValueEditor(ctx)
             return
         }
-        val total = if (replace) Work.setEarning(ctx, v) else Work.addEarning(ctx, v)
+        val total = if (add) Work.addEarning(ctx, v) else Work.subtractEarning(ctx, v)
         valueField?.setText("")
         closeValueEditor(ctx)
         GanhoSync.push(ctx, Work.key(), total, null)

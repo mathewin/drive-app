@@ -11,8 +11,8 @@ android {
         applicationId = "com.example.calculadoraganhos"
         minSdk = 26
         targetSdk = 34
-        versionCode = 43
-        versionName = "2.4.26"
+        versionCode = 45
+        versionName = "2.4.28"
     }
 
     buildTypes {
