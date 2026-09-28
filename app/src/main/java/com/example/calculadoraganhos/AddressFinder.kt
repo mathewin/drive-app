@@ -36,6 +36,7 @@ object AddressFinder {
         for (it in sorted) {
             if (picks.size >= 2) break
             val t = it.text.trim()
+            if (ParsingUtils.isNoiseLine(t)) continue
             if (candidate(t)) picks.add(it)
         }
         if (picks.isEmpty()) return RideAddresses()

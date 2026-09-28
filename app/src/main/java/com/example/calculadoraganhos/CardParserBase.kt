@@ -9,14 +9,16 @@ abstract class CardParserBase {
     abstract val tripMinWords: List<String>
 
     fun parse(items: List<TextItem>): ParsedCard? {
-        val texts = items.map { it.text }.filter { it.isNotBlank() }
-        if (texts.isEmpty()) return null
-        val fare = parseFare(texts) ?: return null
-        val (pickupKm, tripKm, totalKm) = parseDistances(items)
-        val (pickupMin, tripMin, totalMin) = parseTimes(items)
+        val offer = ParsingUtils.offerItems(items)
+        if (offer.isEmpty()) return null
+        val texts = offer.map { it.text }.filter { it.isNotBlank() }
+        val fare = parseFare(offer) ?: return null
+        val legs = ParsingUtils.extractLegs(offer)
+        val (pickupKm, tripKm, totalKm) = parseDistances(offer, legs)
+        val (pickupMin, tripMin, totalMin) = parseTimes(offer, legs)
         val data = RideData(fare, pickupKm, tripKm, totalKm, pickupMin, tripMin, totalMin)
         if (data.totalDistanceKm <= 0 && data.totalTimeMin <= 0) return null
-        val addr = AddressFinder.extract(items)
+        val addr = AddressFinder.extract(offer)
         return ParsedCard(
             data,
             suspicious = Validator.suspicious(data),
@@ -26,7 +28,8 @@ abstract class CardParserBase {
         )
     }
 
-    private fun parseFare(texts: List<String>): Double? {
+    private fun parseFare(items: List<TextItem>): Double? {
+        val texts = items.map { it.text }
         for (t in texts) {
             val lower = t.lowercase()
             for (kw in fareWords) {
@@ -38,10 +41,33 @@ abstract class CardParserBase {
                 }
             }
         }
+        val nearLegs = fareNearLegs(items)
+        if (nearLegs != null) return nearLegs
         return ParsingUtils.moneyValues(texts).maxOrNull()
     }
 
-    private fun parseDistances(items: List<TextItem>): Triple<Double, Double, Double> {
+    private fun fareNearLegs(items: List<TextItem>): Double? {
+        val legItems = items.filter { ParsingUtils.offerLeg(it.text) != null }
+        if (legItems.isEmpty()) return null
+        val y0 = legItems.minOf { it.bounds.top }
+        val y1 = legItems.maxOf { it.bounds.bottom }
+        val pad = ((y1 - y0).coerceAtLeast(80) * 3).coerceAtLeast(120)
+        val near = items.filter {
+            it.bounds.centerY() in (y0 - pad)..(y1 + pad / 2)
+        }
+        return ParsingUtils.moneyValues(near.map { it.text }).maxOrNull()
+    }
+
+    private fun parseDistances(
+        items: List<TextItem>,
+        legs: List<Pair<Double, Double>>
+    ): Triple<Double, Double, Double> {
+        if (legs.size >= 2) {
+            return Triple(legs.first().second, legs.last().second, 0.0)
+        }
+        if (legs.size == 1) {
+            return Triple(0.0, 0.0, legs[0].second)
+        }
         var pickup = 0.0
         var trip = 0.0
         var total = 0.0
@@ -67,7 +93,16 @@ abstract class CardParserBase {
         }
     }
 
-    private fun parseTimes(items: List<TextItem>): Triple<Double, Double, Double> {
+    private fun parseTimes(
+        items: List<TextItem>,
+        legs: List<Pair<Double, Double>>
+    ): Triple<Double, Double, Double> {
+        if (legs.size >= 2) {
+            return Triple(legs.first().first, legs.last().first, 0.0)
+        }
+        if (legs.size == 1) {
+            return Triple(0.0, 0.0, legs[0].first)
+        }
         var pickup = 0.0
         var trip = 0.0
         var total = 0.0

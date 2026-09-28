@@ -113,9 +113,80 @@ object ParsingUtils {
         return if (signal) plain else null
     }
 
+    private val RE_CLOCK = Regex("""^\s*\d{1,2}:\d{2}(?::\d{2})?\s*$""")
+    private val RE_LEG = Regex(
+        """(\d{1,3})\s*(?:min(?:uto)?s?)\s*\(\s*([0-9]+(?:[.,][0-9]+)?)\s*km\s*\)""",
+        RegexOption.IGNORE_CASE
+    )
+
+    fun isNoiseLine(text: String): Boolean {
+        val t = text.trim()
+        if (t.isEmpty()) return true
+        val l = t.lowercase(Locale.ROOT)
+        if (RE_CLOCK.matches(t)) return true
+        if (RE_PER_KM.containsMatchIn(l) || l.contains("/km") || l.contains("por km")) return true
+        if (l.contains("aprox")) return true
+        if (l.contains("tarifa") && (l.contains("inclus") || l.contains("dinamic") || l.contains("expresso"))) return true
+        if (l.contains("viagem longa") || (l.contains("mais de") && l.contains("min"))) return true
+        if (l.contains("no ar") || l.startsWith("hoje ") || l.contains("hoje ")) return true
+        if (l == "trabalho" || l == "pausar" || l == "zerar" || l == "iniciar" || l == "ok" || l == "valor") return true
+        if (l == "perfil premium" || l == "verificado") return true
+        return false
+    }
+
+    fun offerItems(items: List<TextItem>): List<TextItem> {
+        val useful = items.filter { !isNoiseLine(it.text) }
+        if (useful.isEmpty()) return useful
+        val screenH = useful.maxOf { it.bounds.bottom }.coerceAtLeast(1)
+        val bottom = useful.filter { it.bounds.centerY() >= (screenH * 0.28).toInt() }
+        return if (bottom.any { moneyValues(listOf(it.text)).isNotEmpty() }) bottom else useful
+    }
+
+    fun offerLeg(text: String): Pair<Double, Double>? {
+        val m = RE_LEG.find(text) ?: return null
+        val min = toDouble(m.groupValues[1])
+        val km = toDouble(m.groupValues[2])
+        if (min <= 0 || km <= 0) return null
+        return min to km
+    }
+
+    fun extractLegs(items: List<TextItem>): List<Pair<Double, Double>> {
+        val sorted = items.sortedWith(compareBy({ it.bounds.top }, { it.bounds.left }))
+        val out = ArrayList<Pair<Double, Double>>()
+        var i = 0
+        while (i < sorted.size) {
+            val t = sorted[i].text
+            val combined = offerLeg(t)
+            if (combined != null) {
+                out.add(combined)
+                i++
+                continue
+            }
+            val min = minutesValue(t)
+            val kmHere = kmValue(t)
+            if (min != null && min > 0 && kmHere != null && kmHere > 0) {
+                out.add(min to kmHere)
+                i++
+                continue
+            }
+            if (min != null && min > 0 && i + 1 < sorted.size) {
+                val next = sorted[i + 1].text
+                val kmNext = kmValue(next)
+                if (kmNext != null && kmNext > 0 && minutesValue(next) == null) {
+                    out.add(min to kmNext)
+                    i += 2
+                    continue
+                }
+            }
+            i++
+        }
+        return out
+    }
+
     fun moneyValues(texts: List<String>): List<Double> {
         val out = ArrayList<Double>()
         for (t in texts) {
+            if (isNoiseLine(t)) continue
             val clean1 = RE_PER_KM.replace(t, " ")
             val clean2 = RE_PER_H.replace(clean1, " ")
             for (m in RE_MONEY.findAll(clean2)) {
@@ -127,6 +198,7 @@ object ParsingUtils {
     }
 
     fun kmValue(text: String): Double? {
+        if (isNoiseLine(text)) return null
         val clean1 = RE_PER_KM.replace(text, " ")
         val clean2 = RE_PER_H.replace(clean1, " ")
         RE_KM.find(clean2)?.let { return toDouble(it.groupValues[1]) }
@@ -137,6 +209,7 @@ object ParsingUtils {
     fun kmValues(texts: List<String>): List<Double> = texts.mapNotNull { kmValue(it) }
 
     fun minutesValue(text: String): Double? {
+        if (isNoiseLine(text)) return null
         RE_HM.find(text)?.let {
             val h = toDouble(it.groupValues[1])
             val m = if (it.groupValues[2].isNotEmpty()) toDouble(it.groupValues[2]) else 0.0

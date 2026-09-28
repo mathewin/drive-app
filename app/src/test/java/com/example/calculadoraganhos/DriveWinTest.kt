@@ -118,4 +118,66 @@ class DriveWinTest {
         assertNull(ParsingUtils.passengerRating(listOf("R\$ 15,09", "4,9", "6.3 km")))
         assertNull(ParsingUtils.passengerRating(listOf("15,09", "3,50", "1,93/km")))
     }
+
+    @Test
+    fun uberOfferCardFromScreenshot() {
+        val card = UberParser.parse(
+            listOf(
+                item("00:01:05"),
+                item("TRABALHO"),
+                item("PAUSAR"),
+                item("ZERAR"),
+                item("no ar: R\$ 50,00"),
+                item("Hoje 18h 12min · R\$ 50,00"),
+                item("UberX"),
+                item("R\$ 26,02"),
+                item("R\$1,06/km aprox."),
+                item("4,94 (3070)"),
+                item("Verificado"),
+                item("8 min (3.1 km)"),
+                item("R. Campos Belos, Vila Sao Tomaz, Aparecida de Goiania"),
+                item("39 minutos (21.4 km)"),
+                item("R. Jc-019, Goiania"),
+                item("Viagem longa (mais de 30 min)"),
+                item("Selecionar")
+            )
+        )
+        assertNotNull(card)
+        assertEquals(26.02, card!!.data.fare, 0.001)
+        assertEquals(3.1, card.data.pickupKm, 0.001)
+        assertEquals(21.4, card.data.tripKm, 0.001)
+        assertEquals(24.5, card.data.totalDistanceKm, 0.001)
+        assertEquals(8.0, card.data.pickupMin, 0.001)
+        assertEquals(39.0, card.data.tripMin, 0.001)
+        assertEquals(47.0, card.data.totalTimeMin, 0.001)
+        assertEquals("4,94", card.passenger)
+    }
+
+    @Test
+    fun ninetyNineOfferCardFromScreenshot() {
+        val card = NinetyNineParser.parse(
+            listOf(
+                item("Pop Expresso"),
+                item("R\$19,24"),
+                item("R\$1,57/km"),
+                item("R\$3,64 Tarifa Expresso inclusa"),
+                item("R\$2,88 Tarifa base dinamica incl."),
+                item("4,90 · 298 corridas"),
+                item("Perfil Premium"),
+                item("5 min (1,8 km)"),
+                item("Olhar Clinico Kids, Rua Tupinambas, qd 10"),
+                item("18 min (10,4 km)"),
+                item("CMEI Dom Antonio Ribeiro de Oliveira, Rua 236")
+            )
+        )
+        assertNotNull(card)
+        assertEquals(19.24, card!!.data.fare, 0.001)
+        assertEquals(1.8, card.data.pickupKm, 0.001)
+        assertEquals(10.4, card.data.tripKm, 0.001)
+        assertEquals(12.2, card.data.totalDistanceKm, 0.001)
+        assertEquals(5.0, card.data.pickupMin, 0.001)
+        assertEquals(18.0, card.data.tripMin, 0.001)
+        assertEquals(23.0, card.data.totalTimeMin, 0.001)
+        assertEquals("4,90", card.passenger)
+    }
 }

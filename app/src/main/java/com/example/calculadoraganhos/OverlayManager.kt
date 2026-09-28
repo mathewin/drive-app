@@ -247,8 +247,13 @@ object OverlayManager {
             )
         }
         if (prefs.showPerHour) {
+            val hourColor = when (c.result.level) {
+                Level.EXCELLENT, Level.GOOD -> COLOR_VERDE
+                Level.MEDIUM -> COLOR_AMBAR
+                Level.BAD -> COLOR_VERMELHO
+            }
             root.addView(
-                text(ctx, "${ParsingUtils.formatMoney(c.result.perHour)}/h", 17 * scale, COLOR_CINZA, false),
+                text(ctx, "${ParsingUtils.formatMoney(c.result.perHour)}/h", 20 * scale, hourColor, true),
                 paramsTop(dp(2))
             )
         }
