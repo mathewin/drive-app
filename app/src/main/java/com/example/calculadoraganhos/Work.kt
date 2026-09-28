@@ -194,6 +194,16 @@ object Work {
         return total
     }
 
+    fun setEarning(ctx: Context, value: Double): Double {
+        ensure(ctx)
+        val total = if (value < 0.0) 0.0 else value
+        synchronized(lock) {
+            earningsMap[key()] = total
+        }
+        persist(ctx)
+        return total
+    }
+
     fun earningsOn(ctx: Context, k: String): Double {
         ensure(ctx)
         synchronized(lock) { return earningsMap[k] ?: 0.0 }
